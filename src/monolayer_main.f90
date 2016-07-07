@@ -1,8 +1,8 @@
 
 ! Main program
 !-----------------------------------------------------------------------------------------
-PROGRAM spheroid_main
-use spheroid_mod
+PROGRAM monolayer_main
+use monolayer_mod
 use global
 implicit none
 integer :: ncpu, res, summarydata(100)
