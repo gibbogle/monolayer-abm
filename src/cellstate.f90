@@ -18,6 +18,7 @@ contains
 subroutine GrowCells(dose,dt,ok)
 real(REAL_KIND) :: dose, dt
 logical :: ok
+integer :: kcell, idrug, ichemo
 
 !call logger('GrowCells')
 ok = .true.
@@ -26,18 +27,13 @@ if (dose > 0) then
 	call Irradiation(dose, ok)
 	if (.not.ok) return
 endif
-!if (use_division) then
-	call CellGrowth(dt,ok)
-	if (.not.ok) return
-!endif
+call CellGrowth(dt,ok)
+if (.not.ok) return
+
 if (use_death) then
 	call CellDeath(dt,ok)
 	if (.not.ok) return
 endif
-!if (use_migration) then
-!	call CellMigration(ok)
-!	if (.not.ok) return
-!endif
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -602,11 +598,12 @@ end subroutine
 ! the cycle time is increased by an amount that depends on the dose.  The delay may be
 ! transmitted to progeny cells.
 ! 
+! NOTE: now the medium concentrations are not affected by cell growth
 !-----------------------------------------------------------------------------------------
 subroutine CellGrowth(dt,ok)
 real(REAL_KIND) :: dt
 logical :: ok
-integer :: kcell, nlist0, site(3), ityp, idrug, kpar=0
+integer :: kcell, nlist0, site(3), ityp, idrug, ichemo, kpar=0
 integer :: divide_list(10000), ndivide, i
 real(REAL_KIND) :: tnow, C_O2, C_glucose, metab, metab_O2, metab_glucose, dVdt, vol0, R		!r_mean(2), c_rate(2)
 real(REAL_KIND) :: r_mean(MAX_CELLTYPES), c_rate(MAX_CELLTYPES)
@@ -631,18 +628,6 @@ do kcell = 1,nlist0
 	cp => cell_list(kcell)
 	if (cp%state == DEAD) cycle
 	ityp = cp%celltype
-!	c_rate = log(2.0)/divide_time_mean(ityp)
-!	r_mean = Vdivide0/(2*divide_time_mean(ityp))
-!	if (cell_list(kcell)%growth_delay) then
-!		first_cycle = (cell_list(kcell)%N_delayed_cycles_left == LQ(ityp)%growth_delay_N)	! cell has not divided since hit
-!		if (use_growth_suppression) then
-!			if (tnow < cell_list(kcell)%t_growth_delay_end) cycle	! growth suppression
-!		else
-!			tdelay = cell_list(kcell)%dt_delay
-!			c_rate = log(2.0)/(divide_time_mean(ityp) + tdelay)		
-!			r_mean = Vdivide0/(2*(divide_time_mean(ityp) + tdelay))	! growth rate reduction
-!		endif
-!	endif
 	if (cp%volume < cp%divide_volume) then	! still growing - not delayed
 		C_O2 = cp%conc(OXYGEN)
 		C_glucose = cp%conc(GLUCOSE)
@@ -657,23 +642,13 @@ do kcell = 1,nlist0
     		metab_glucose = glucose_metab(C_glucose)
 			metab = metab_glucose
 		endif
-!		if (use_constant_divide_volume) then
-!			dVdt = metab*Vdivide0/(2*cell_list(kcell)%divide_time)
-!		else
-!			if (use_V_dependence) then
-!				dVdt = c_rate(ityp)*cell_list(kcell)%volume*metab
-!			else
-!				dVdt = r_mean(ityp)*metab
-!			endif
-!		endif
 		dVdt = get_dVdt(cp,metab)
-!		if (kcell <= 5) write(*,'(a,i6,e12.3)') 'dVdt: ',kcell,dVdt
 		if (suppress_growth) then	! for checking solvers
 			dVdt = 0
 		endif
-!		site = cp%site
 		Cin_0 = cp%conc
 !		Cex_0 = occupancy(site(1),site(2),site(3))%C
+        Cex_0 = Caverage(MAX_CHEMO+1:2*MAX_CHEMO)
 		cp%dVdt = dVdt
 		Vin_0 = cp%volume*Vcell_cm3	! cm^3
 		Vex_0 = Vsite_cm3 - Vin_0					! cm^3
@@ -692,27 +667,6 @@ do kcell = 1,nlist0
 	endif
 	
 	if (cp%volume > cp%divide_volume) then	! time to divide
-		! try letting tagged cell die only after end of G2/M delay
-!		if (cell_list(kcell)%radiation_tag) then
-!			R = par_uni(kpar)
-!			if (R < cell_list(kcell)%p_rad_death) then
-!				call CellDies(kcell)
-!				Nradiation_dead(ityp) = Nradiation_dead(ityp) + 1
-!				cycle
-!			endif
-		!
-!			if (cell_list(kcell)%growth_delay) then
-!				if (.not.cell_list(kcell)%G2_M) then	! this is the first time to divide
-!					cell_list(kcell)%t_growth_delay_end = tnow + cell_list(kcell)%dt_delay
-!					cell_list(kcell)%G2_M = .true.
-!				endif
-!				if (tnow > cell_list(kcell)%t_growth_delay_end) then
-!					cell_list(kcell)%G2_M = .false.
-!				else
-!					cycle
-!				endif
-!			endif
-!		endif
 		drugkilled = .false.
 		do idrug = 1,ndrugs_used
 			if (cp%drug_tag(idrug)) then
@@ -726,21 +680,6 @@ do kcell = 1,nlist0
 			endif
 		enddo
 		if (drugkilled) cycle
-!		if (cell_list(kcell)%radiation_tag .and..not.cell_list(kcell)%G2_M) then
-!			if (cell_list(kcell)%growth_delay) then
-!				if (.not.cell_list(kcell)%G2_M) then	! this is the first time to divide
-!					cell_list(kcell)%t_growth_delay_end = tnow + cell_list(kcell)%dt_delay
-!					cell_list(kcell)%G2_M = .true.
-!					write(*,'(a,i6,2f8.0)') 't_growth_delay_end: ',kcell,cell_list(kcell)%t_growth_delay_end,cell_list(kcell)%dt_delay
-!				endif
-!				if (tnow > cell_list(kcell)%t_growth_delay_end) then
-!					write(*,*) 'tnow > t_growth_delay_end: ', kcell
-!					cell_list(kcell)%G2_M = .false.
-!				else
-!					cycle
-!				endif
-!			endif
-!		endif
 
 		if (cp%growth_delay) then
 			if (cp%G2_M) then
@@ -764,24 +703,10 @@ do kcell = 1,nlist0
 				cycle
 			endif
 		endif
-		!
-!		elseif (radiation_dosed) then	! non-tagged cells also experience growth delay
-!			if (cell_list(kcell)%G2_M) then
-!				if (tnow > cell_list(kcell)%t_growth_delay_end) then
-!					cell_list(kcell)%G2_M = .false.
-!				else
-!					cycle
-!				endif
-!			else
-!				cell_list(kcell)%t_growth_delay_end = tnow + cell_list(kcell)%dt_delay
-!				cell_list(kcell)%G2_M = .true.
-!				cycle
-!			endif		
 	    ndivide = ndivide + 1
 	    divide_list(ndivide) = kcell
 	endif
 enddo
-!write(*,'(a,e12.3)') 'minVex: ',minVex
 do i = 1,ndivide
     kcell = divide_list(i)
 	kcell_dividing = kcell
@@ -902,8 +827,6 @@ integer :: j, k, kcell1, ityp, site0(3), site1(3), site2(3), site01(3), site(3),
 integer :: npath, path(3,200)
 real(REAL_KIND) :: tnow, R, v, vmax, V0, Tdiv, Cex0(MAX_CHEMO), M0(MAX_CHEMO), M1(MAX_CHEMO), alpha(MAX_CHEMO)
 real(REAL_KIND) :: cfse0, cfse1
-!integer :: freesite(27,3)
-!type (boundary_type), pointer :: bdry
 logical :: use_simple_mass_balance = .false.
 
 if (dbug) then
@@ -937,586 +860,6 @@ cell_list(kcell1)%CFSE = cfse1
 
 end subroutine
 
-!site0 = cell_list(kcell0)%site
-!Cex0 = occupancy(site0(1),site0(2),site0(3))%C
-!if (divide_option == DIVIDE_USE_CLEAR_SITE .or. &			! look for the best nearby clear site, if it exists use it
-!	divide_option == DIVIDE_USE_CLEAR_SITE_RANDOM) then		! make random choice from nearby clear sites
-!	vmax = -1.0e10
-!	nfree = 0
-!	do j = 1,27
-!		if (j == 14) cycle
-!		site01 = site0 + jumpvec(:,j)
-!!		if (occupancy(site01(1),site01(2),site01(3))%indx(1) < -100) then
-!		if (occupancy(site01(1),site01(2),site01(3))%indx(1) == 0) then ! vacant site, not OUTSIDE
-!			nfree = nfree + 1
-!			freesite(nfree,:) = site01
-!			v = SiteValue(occupancy(site01(1),site01(2),site01(3))%C(:))
-!			if (v > vmax) then
-!				vmax = v
-!				bestsite = site01
-!			endif
-!		endif
-!	enddo
-!	if (nfree > 0) then
-!		if (divide_option == DIVIDE_USE_CLEAR_SITE) then	! use this site for the progeny cell
-!			site01 = bestsite
-!		else	! random choice
-!			j = random_int(1,nfree,0)
-!			site01 = freesite(j,:)
-!		endif
-!		call CloneCell(kcell0,kcell1,site01,ok)
-!		if (.not.ok) then
-!			call logger('Error: CloneCell: vacant site')
-!		endif
-!		cell_list(kcell1)%CFSE = cfse1
-!		Nreuse = Nreuse + 1
-!		return
-!	endif
-!endif
-!
-!do
-!	j = random_int(1,6,kpar)
-!	site01 = site0 + neumann(:,j)
-!	if (site01(3) < zmin) then
-!		cycle
-!	endif
-!	if (occupancy(site01(1),site01(2),site01(3))%indx(1) == OUTSIDE_TAG) then	! site01 is outside, use it directly
-!		npath = 0
-!		site1 = site0
-!		if (site01(3) < zmin) then
-!			write(logmsg,*) 'CellDivider: OUTSIDE: z < zmin'
-!			call logger(logmsg)
-!			ok = .false.
-!			return
-!		endif
-!	elseif (bdrylist_present(site01,bdrylist)) then	! site01 is on the boundary
-!		npath = 1
-!		site1 = site01
-!		path(:,1) = site01
-!		if (site01(3) < zmin) then
-!			write(logmsg,*) 'CellDivider: boundary: z < zmin'
-!			call logger(logmsg)
-!			ok = .false.
-!			return
-!		endif
-!	else
-!		if (dbug) call logger('ChooseBdrySite')
-!		call ChooseBdrysite(site01,site1,ok)
-!		if (dbug) call logger('did ChooseBdrySite')
-!		if (.not.ok) return
-!		if (site01(3) < zmin) then
-!			write(logmsg,*) 'CellDivider: chosen: z < zmin'
-!			call logger(logmsg)
-!			ok = .false.
-!			return
-!		endif
-!		if (occupancy(site1(1),site1(2),site1(3))%indx(1) == 0) then
-!			write(logmsg,*) 'CellDivider: after choose_bdrysite: site1 is VACANT: ',site1
-!			call logger(logmsg)
-!			ok = .false.
-!			return
-!		endif
-!		call SelectPath(site0,site01,site1,path,npath,ok)
-!		if (.not.ok) then
-!			write(logmsg,*) 'CellDivider: SelectPath fails with site0, site01: ',site0,site01
-!			call logger(logmsg)
-!			ok = .false.
-!			return
-!		endif
-!		! path(:,:) goes from site01 to site1, which is a bdry site or adjacent to a vacant site
-!	!	if (.not.isbdry(site1)) then
-!	!	    call logger('should be bdry or vacant, is not')
-!	!	    stop
-!	!	endif
-!	endif
-!	exit
-!enddo
-!
-!if (npath > 0) then
-!	! Need to choose an outside or vacant site near site1
-!	call getOutsideSite(site1,site2)
-!	npath = npath+1
-!	path(:,npath) = site2
-!	! path(:,:) now goes from site01 to site2, which is an outside site next to site1
-!	if (occupancy(site2(1),site2(2),site2(3))%indx(1) == OUTSIDE_TAG) then
-!		Nsites = Nsites + 1
-!		call RemoveFromMedium
-!	endif
-!else
-!	! site01 is the destination site for the new cell
-!	site2 = site01
-!	Nsites = Nsites + 1
-!endif
-!
-!if (.not.use_simple_mass_balance) then
-!    call GetPathMass(site0,site01,path,npath,M0)
-!endif
-!if (npath > 0) then
-!	call PushPath(path,npath)
-!!	if (bdry_debug) call CheckBdryList('after PushPath')
-!endif
-!call CloneCell(kcell0,kcell1,site01,ok)
-!if (.not.ok) then
-!	call logger('Error: CloneCell: pushed site')
-!	return
-!endif
-!cell_list(kcell1)%CFSE = cfse1
-!
-!! Cell division completed
-!! Adjust concentrations, boundary list
-!
-!if (use_simple_mass_balance) then
-!    if (npath > 0) then
-!        call AdjustMass(site0,site2)
-!    endif
-!else
-!! This is superceded by a simple adjustment to the extracellular concentration at the final destination site
-!    call GetPathMass(site0,site01,path,npath,M1)
-!    do ichemo = 1,MAX_CHEMO
-!	    if (M0(ichemo) >= 0 .and. M1(ichemo) > 0) then
-!		    alpha(ichemo) = M0(ichemo)/M1(ichemo)	! scaling for concentrations on the path
-!	    else
-!		    alpha(ichemo) = 1
-!	    endif
-!    enddo
-!    call ScalePathConcentrations(site0,site01,path,npath,alpha)
-!endif
-!!if (npath > 0) then
-!!	call FixPathConcentrations1(path,npath)
-!!endif
-!!! Now adjust extracellular concentrations for the parent cell site to ensure mass conservation
-!!Cex0 = occupancy(site0(1),site0(2),site0(3))%C(:)
-!!occupancy(site0(1),site0(2),site0(3))%C(:) = (Cex0*(Vsite_cm3 - V0) + occupancy(site01(1),site01(2),site01(3))%C(:)*V0/2)/(Vsite_cm3 - V0/2)
-!
-!!call SetRadius(Nsites)
-!!call extendODEdiff(site2)
-!! Now need to fix the bdrylist.  
-!! site1 was on the boundary, but may no longer be.
-!! site2 may be now on the boundary
-!! First add site2
-!if (isbdry(site2)) then   ! add it to the bdrylist
-!	if (dbug) then
-!		write(logmsg,*) 'add site2 to bdrylist: ',site2
-!		call logger(logmsg)
-!	endif
-!    allocate(bdry)
-!    bdry%site = site2
-!!    bdry%chemo_influx = .false.
-!    nullify(bdry%next)
-!    call bdrylist_insert(bdry,bdrylist)
-!    occupancy(site2(1),site2(2),site2(3))%bdry => bdry
-!    call SetBdryConcs(site2)
-!else
-!!    write(logmsg,'(a,3i4,i6)') 'Added site is not bdry: ',site2,occupancy(site2(1),site2(2),site2(3))%indx(1)
-!!	call logger(logmsg)
-!    call SetBdryConcs(site2)
-!endif
-!! Now check sites near site2 that may have changed their boundary status (including site1)
-!!do j = 1,6
-!!	site = site2 + neumann(:,j)
-!do j = 1,27
-!	if (j == 14) cycle
-!	site = site2 + jumpvec(:,j)
-!	if (isbdry(site)) then
-!		if (.not.bdrylist_present(site,bdrylist)) then	! add it
-!			allocate(bdry)
-!			bdry%site = site
-!			nullify(bdry%next)
-!			call bdrylist_insert(bdry,bdrylist)
-!			occupancy(site(1),site(2),site(3))%bdry => bdry
-!!			if (bdry_debug) call CheckBdryList('after bdrylist_insert')
-!		endif
-!	else
-!		if (bdrylist_present(site,bdrylist)) then	! remove it
-!			call bdrylist_delete(site,bdrylist)
-!			nullify(occupancy(site(1),site(2),site(3))%bdry)
-!!			if (bdry_debug) call CheckBdryList('after bdrylist_delete')
-!		endif
-!	endif
-!enddo
-!end subroutine
-
-!-----------------------------------------------------------------------------------------
-! In the following C0 -> Cex0, Cn -> Cex, Vn -> Vex
-!-----------------------------------------------------------------------------------------
-!subroutine AdjustMass(site0,site2)
-!integer :: site0(3), site2(3)
-!integer :: kcell2
-!real(REAL_KIND) :: Vc, Vex, Cex0(MAX_CHEMO), Cex(MAX_CHEMO)
-!
-!! Concentration adjustment
-!kcell2 = occupancy(site2(1),site2(2),site2(3))%indx(1)
-!Cex0 = occupancy(site0(1),site0(2),site0(3))%C
-!Vc = cell_list(kcell2)%volume
-!Vex = Vsite_cm3/Vcell_cm3 - Vc  ! normalised extracellular volume
-!Cex = occupancy(site2(1),site2(2),site2(3))%C
-!write(*,'(a,4e12.3)') 'AdjustMass: ',Vex,Vc,Cex0(OXYGEN),Cex(OXYGEN)
-!Cex = (Vex*Cex + 1.2*(Cex-Cex0))/Vex
-!write(*,'(a,e12.3)') 'Cex: ',Cex(OXYGEN)
-!occupancy(site2(1),site2(2),site2(3))%C = Cex
-!cell_list(kcell2)%Cex = Cex
-!end subroutine
-
-!-----------------------------------------------------------------------------------------
-!-----------------------------------------------------------------------------------------
-!subroutine GetPathMass(site0,site01,path,npath,mass)
-!integer :: site0(3),site01(3),path(3,200),npath
-!real(REAL_KIND) :: mass(:)
-!integer :: k, site(3), kcell, ic
-!real(REAL_KIND) :: V, C
-!
-!do ic = 1,MAX_CHEMO
-!	mass(ic) = 0
-!	if (.not.chemo(ic)%used) cycle
-!	C = occupancy(site0(1),site0(2),site0(3))%C(ic)
-!	kcell = occupancy(site0(1),site0(2),site0(3))%indx(1)
-!	if (kcell > 0) then
-!		V = cell_list(kcell)%volume*Vcell_cm3
-!	else
-!		V = 0
-!	endif
-!	mass(ic) = mass(ic) + C*(Vsite_cm3 - V)
-!	if (npath == 0) then
-!		C = occupancy(site01(1),site01(2),site01(3))%C(ic)
-!		kcell = occupancy(site01(1),site01(2),site01(3))%indx(1)
-!		if (kcell > 0) then
-!			V = cell_list(kcell)%volume*Vcell_cm3
-!		else
-!			V = 0
-!		endif
-!		mass(ic) = mass(ic) + C*(Vsite_cm3 - V)
-!	else
-!		do k = 1, npath
-!			site = path(:,k)
-!			C = occupancy(site01(1),site01(2),site01(3))%C(ic)
-!			kcell = occupancy(site(1),site(2),site(3))%indx(1)
-!			if (kcell > 0) then
-!				V = cell_list(kcell)%volume*Vcell_cm3
-!			else
-!				V = 0
-!			endif
-!			mass(ic) = mass(ic) + C*(Vsite_cm3 - V)
-!		enddo
-!	endif
-!enddo
-!end subroutine
-
-!-----------------------------------------------------------------------------------------
-! NOTE: This is not satisfactory, because it can create a concentration increase -
-! but it is not clear what should be done!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! NOW NOT USED
-!-----------------------------------------------------------------------------------------
-!subroutine ScalePathConcentrations(site0,site01,path,npath,alpha)
-!integer :: site0(3),site01(3),path(3,200),npath
-!real(REAL_KIND) :: alpha(:)
-!integer :: k, site(3), kcell, ichemo
-!
-!do ichemo = 1,MAX_CHEMO
-!	if (.not.chemo(ichemo)%used) cycle
-!	if (chemo(ichemo)%constant) cycle
-!	occupancy(site0(1),site0(2),site0(3))%C(ichemo) = alpha(ichemo)*occupancy(site0(1),site0(2),site0(3))%C(ichemo)
-!	if (npath == 0) then
-!		occupancy(site01(1),site01(2),site01(3))%C(ichemo) = alpha(ichemo)*occupancy(site01(1),site01(2),site01(3))%C(ichemo)
-!	else
-!		do k = 1, npath
-!			site01 = path(:,k)
-!			occupancy(site01(1),site01(2),site01(3))%C(ichemo) = alpha(ichemo)*occupancy(site01(1),site01(2),site01(3))%C(ichemo)
-!			if (isnan(occupancy(site01(1),site01(2),site01(3))%C(ichemo))) then
-!				write(nflog,*) 'ScalePathConcentrations: isnan: ichemo,site: ',ichemo,site01,alpha(ichemo)
-!			endif
-!			if (chemo(ichemo)%constant .and. occupancy(site01(1),site01(2),site01(3))%C(ichemo) /= chemo(ichemo)%bdry_conc) then
-!				write(nflog,*) 'ScalePathConcentrations: constant but C != bdry_conc: ', &
-!					ichemo,occupancy(site01(1),site01(2),site01(3))%C(ichemo),chemo(ichemo)%bdry_conc
-!				stop
-!			endif
-!			
-!		enddo
-!	endif
-!enddo
-!end subroutine
-
-!-----------------------------------------------------------------------------------------
-! The extracellular concentrations along the path are adjusted sequentially, starting from
-! the last-but-one site and working backwards to the first, site01
-! NOT USED
-!-----------------------------------------------------------------------------------------
-!subroutine FixPathConcentrations1(path,npath)
-!integer :: path(3,200),npath
-!integer :: k, site1(3), site2(3), kcell, ic
-!real(REAL_KIND) :: V, Cex(MAX_CHEMO)
-!
-!do k = npath-1,1,-1
-!	site1 = path(:,k)
-!	kcell = occupancy(site1(1),site1(2),site1(3))%indx(1)
-!	V = cell_list(kcell)%volume*Vcell_cm3
-!	Cex = occupancy(site1(1),site1(2),site1(3))%C
-!	site2 = path(:,k+1)
-!	occupancy(site1(1),site1(2),site1(3))%C = ((Vsite_cm3 - V)*Cex + V*occupancy(site2(1),site2(2),site2(3))%C)/Vsite_cm3
-!	do ic = 1,MAX_CHEMO
-!		if (.not.chemo(ic)%used) cycle
-!		if (occupancy(site1(1),site1(2),site1(3))%C(ic) < 0) then
-!			occupancy(site1(1),site1(2),site1(3))%C(ic) = max(occupancy(site2(1),site2(2),site2(3))%C(ic), Cex(ic))
-!		endif
-!	enddo
-!enddo
-!end subroutine
-
-!-----------------------------------------------------------------------------------------
-! Need to choose a site on the boundary in some sense near site0, and also to preserve
-! the required shape.
-! alpha_max is calculated as a function of the fractional distance of site0 from Centre,
-! i.e. of r/Radius.
-! This determines the subset of boundary sites that are examined.
-! The criterion for a site to be a candidate is:
-! the angle between v = site - Centre and vc = site0 - Centre must be < alpha_max
-! In fact the decision is made based on cos(angle) > cos(alpha_max).
-! From this set of sites we choose the one that departs most from the desired boundary
-! in the negative sense.  In the case of a sphere this means the site with the least
-! distance from Centre, but for a squashed sphere we need a different way to choose.
-! 
-!-----------------------------------------------------------------------------------------
-!subroutine ChooseBdrysite(site0,site1,ok)
-!integer :: site0(3), site1(3)
-!logical :: ok
-!integer :: site(3), sitemin(3)
-!real(REAL_KIND) :: vc(3), v(3), r, rfrac, d, alpha_max, cosa_min, dmin, cosa
-!real(REAL_KIND) :: z, r2, sin2, cos2, d2, dd, dsq, dsqmax, tempCentre(3)
-!logical :: hit
-!type (boundary_type), pointer :: bdry
-!
-!tempCentre = blob_centre
-!if (is_dropped .and. site0(3) < blob_centre(3)) then
-!	tempCentre(3) = (site0(3) + 2*blob_centre(3))/3
-!endif
-!vc = site0 - tempCentre
-!r = norm(vc)
-!vc = vc/r
-!rfrac = r/blob_radius
-!alpha_max = getAlphaMax(rfrac)
-!cosa_min = cos(alpha_max)
-!dmin = 1.0e10
-!dsqmax = -1.0e10
-!hit = .false.
-!bdry => bdrylist
-!do while ( associated ( bdry )) 
-!    site = bdry%site
-!    v = site - tempCentre
-!    d = norm(v)	
-!	cosa = dot_product(v,vc)/d
-!	if (cosa > cosa_min) then	! Note: in squashed case we need to worry about cells near the surface
-!		hit = .true.
-!		if (is_dropped) then
-!			z = site0(3) + cdrop - zmin
-!			if (z < 2*bdrop*blob_radius) then
-!				cos2 = (1 - (z)/(bdrop*blob_radius))**2
-!				sin2 = 1 - cos2
-!			else
-!				r2 = (site0(1)-blob_centre(1))**2 + (site0(2)-blob_centre(2))**2
-!				sin2 = r2/(adrop*blob_radius)**2
-!				cos2 = 1 - sin2
-!			endif
-!			d2 = adrop*adrop*sin2 + bdrop*bdrop*cos2
-!			if (d2 < 0) then
-!				write(nflog,*) 'd2 < 0: cos2, sin2: ',cos2,sin2
-!				write(nflog,*) 'site0(3),cdrop,zmin: ',site0(3),cdrop,zmin,(site0(3) + cdrop - zmin)/(bdrop*blob_radius)
-!				stop
-!			endif
-!			dd = blob_radius*sqrt(d2)	! this is the desired distance for this z
-!			dsq = dd - d	! could use dd/d or dd-d
-!			if (dsq > dsqmax) then
-!				dsqmax = dsq
-!				sitemin = site
-!			endif
-!		else	! this is OK for a sphere, not for the squashed sphere
-!			if (d < dmin) then
-!				dmin = d
-!				sitemin = site
-!			endif
-!		endif
-!	endif
-!    bdry => bdry%next
-!enddo
-!if (.not.hit) then
-!	write(logmsg,*) 'Error: choose_bdrysite: no candidate bdry site'
-!	call logger(logmsg)
-!	ok = .false.
-!	return
-!endif
-!site1 = sitemin
-!ok = .true.
-!end subroutine
-
-!-----------------------------------------------------------------------------------------
-! r is the fractional distance from the sphere centre = (distance from centre)/Radius
-! The parameter alphamax varies: alpha1 -> alpha2 as r: r1 -> r2
-!-----------------------------------------------------------------------------------------
-!real(REAL_KIND) function getAlphaMax(r)
-!real(REAL_KIND) :: r
-!real(REAL_KIND) :: alf, alphamax
-!real(REAL_KIND) :: r1 = 0.0, r2 = 0.8, alpha1 = PI/2, alpha2 = PI/6
-!
-!if (r < r1) then
-!	alphamax = alpha1
-!elseif (r > r2) then
-!	alphamax = alpha2
-!else
-!	alf = (r-r1)/(r2-r1)
-!	alphamax = (1-alf)*alpha1 + alf*alpha2
-!endif
-!getAlphaMax = alphamax
-!end function
-!
-!
-!!-----------------------------------------------------------------------------------------
-!!-----------------------------------------------------------------------------------------
-!subroutine test_get_path
-!integer :: site0(3), site1(3), site2(3), path(3,200), npath, kpar=0
-!integer :: x, y, z, it, k
-!logical :: ok
-!
-!site0 = 0
-!do it = 1,10
-!	do
-!		x = random_int(1,NX,kpar)
-!		y = random_int(1,NY,kpar)
-!		z = random_int(1,NZ,kpar)
-!		if (occupancy(x,y,z)%indx(1) > 0) exit
-!	enddo
-!	site1 = (/x,y,z/)
-!	do
-!		x = random_int(1,NX,kpar)
-!		y = random_int(1,NY,kpar)
-!		z = random_int(1,NZ,kpar)
-!		if (occupancy(x,y,z)%indx(1) > 0) exit
-!	enddo
-!	site2 = (/x,y,z/)
-!	call SelectPath(site0,site1,site2,path,npath,ok)
-!	write(nflog,*) 'path: ',npath
-!	do k = 1,npath
-!		write(nflog,'(i3,2x,3i4)') path(:,k)
-!	enddo
-!enddo
-!end subroutine
-!
-!!-----------------------------------------------------------------------------------------
-!! Find a path of sites leading from site1 to site2
-!! The first site in the list is site1, the last is site2
-!! Previously site2 was always a bdry site.  Now we stop the path when a vacant or outside site 
-!! is encountered.
-!! How do we avoid choosing a path through the site of the dividing cell? site0
-!!-----------------------------------------------------------------------------------------
-!subroutine SelectPath(site0,site1,site2,path,npath,ok)
-!integer :: site0(3),site1(3), site2(3), path(3,200), npath
-!logical :: ok
-!integer :: v(3), jump(3), site(3), k, j, jmin, indx
-!integer, parameter :: maxits = 100
-!real(REAL_KIND) :: r, d2, d2min
-!logical :: hit
-!
-!if (occupancy(site2(1),site2(2),site2(3))%indx(1) <= OUTSIDE_TAG) then
-!    call logger('SelectPath: site2 is OUTSIDE or UNREACHABLE')
-!    ok = .false.
-!    return
-!endif
-!if (occupancy(site2(1),site2(2),site2(3))%indx(1) == 0) then
-!    call logger('SelectPath: site2 is VACANT')
-!    ok = .false.
-!    return
-!endif
-!
-!k = 1
-!site = site1
-!path(:,k) = site
-!hit = .false.
-!do 
-!	d2min = 1.0e10
-!	jmin = 0
-!	do j = 1,27
-!		if (j == 14) cycle
-!		jump = jumpvec(:,j)
-!		v = site + jump
-!		if (v(1)==site0(1) .and. v(2)==site0(2) .and. v(3)==site0(3)) cycle
-!!		if (occupancy(v(1),v(2),v(3))%indx(1) == OUTSIDE_TAG) then
-!		indx = occupancy(v(1),v(2),v(3))%indx(1)
-!		if (indx == 0 .or. indx == OUTSIDE_TAG) then	! outside or vacant - we'll use this!
-!			site2 = site
-!			hit = .true.
-!			exit
-!		endif
-!		v = site2 - v
-!		d2 = v(1)*v(1) + v(2)*v(2) + v(3)*v(3)
-!		if (d2 < d2min) then
-!			d2min = d2
-!			jmin = j
-!		endif
-!	enddo
-!	if (hit) exit
-!	if (jmin == 0) then
-!	    call logger('get path: stuck')
-!		write(logmsg,*) 'SelectPath: stuck for site0,site1,site2: ',site0,site1,site2
-!		call logger(logmsg)
-!	    ok = .false.
-!		return
-!	endif
-!	site = site + jumpvec(:,jmin)
-!	k = k+1
-!	if (k > maxits) then
-!		write(logmsg,*) 'SelectPath: iteration limit exceeded: ',maxits,'  for site0,site1,site2: ',site0,site1,site2
-!		call logger(logmsg)
-!	    ok = .false.
-!		return
-!	endif
-!	path(:,k) = site
-!	if (site(1) == site2(1) .and. site(2) == site2(2) .and. site(3) == site2(3)) exit
-!enddo
-!npath = k
-!ok = .true.
-!end subroutine
-!
-!!-----------------------------------------------------------------------------------------
-!! If there are any necrotic sites in the path, they are first shifted closer to the centre,
-!! then the path is adjusted.
-!!-----------------------------------------------------------------------------------------
-!subroutine ClearPath(path,npath)
-!integer :: npath, path(3,*)
-!logical :: clear
-!integer :: k, kcell, kvacant, site(3)
-!
-!do
-!	clear = .true.
-!	do k = 1,npath
-!		site = path(:,k)
-!		kcell = occupancy(site(1),site(2),site(3))%indx(1)
-!		if (kcell < 0) then
-!			clear = .false.
-!			kvacant = k
-!			exit
-!		endif
-!	enddo
-!	if (clear) return
-!	
-!enddo			
-!end subroutine
-!
-!!-----------------------------------------------------------------------------------------
-!! Need to modify the ODEdiff variables, at least %ivar(?)
-!!-----------------------------------------------------------------------------------------
-!subroutine PushPath(path,npath)
-!integer :: path(3,200),npath
-!integer :: k, site1(3), site2(3), kcell
-!
-!do k = npath-1,1,-1
-!	site1 = path(:,k)
-!	kcell = occupancy(site1(1),site1(2),site1(3))%indx(1)
-!	site2 = path(:,k+1)
-!	if (kcell > 0) then
-!    	cell_list(kcell)%site = site2
-!    endif
-!	occupancy(site2(1),site2(2),site2(3))%indx(1) = kcell
-!enddo
-!occupancy(site1(1),site1(2),site1(3))%indx = 0
-!end subroutine
-
 !-----------------------------------------------------------------------------------------
 ! The daughter cell kcell1 is given the same characteristics as kcell0 and placed at site1.
 ! Random variation is introduced into %divide_volume.
@@ -1544,14 +887,6 @@ else
 	endif
     kcell1 = nlist
 endif
-
-!nlist = nlist + 1
-!if (nlist > max_nlist) then
-!	call logger('Dimension of cell_list() has been exceeded: increase max_nlist and rebuild')
-!	ok = .false.
-!	return
-!endif
-!kcell1 = nlist
 
 ityp = cell_list(kcell0)%celltype
 Ncells = Ncells + 1
@@ -1617,96 +952,6 @@ cell_list(kcell1)%M = cell_list(kcell0)%M
 
 !cell_list(kcell1)%Cex = occupancy(site1(1),site1(2),site1(3))%C
 end subroutine
-
-!-----------------------------------------------------------------------------------------
-! Look at all bdry sites (those with a neumann neighbour outside)
-!-----------------------------------------------------------------------------------------
-!subroutine check_bdry
-!integer :: kcell, i, site(3), site1(3), minv(3), maxv(3)
-!real(REAL_KIND) :: v(3), r, rmin, rmax
-!logical :: bdry
-!
-!rmin = 1.0e10
-!rmax = 0
-!do kcell = 1,nlist
-!	site = cell_list(kcell)%site
-!	bdry = .false.
-!	do i = 1,6
-!		site1 = site + neumann(:,i)
-!		if (occupancy(site1(1),site1(2),site1(3))%indx(1) == OUTSIDE_TAG) then
-!			bdry = .true.
-!			exit
-!		endif
-!	enddo
-!	if (bdry) then
-!		v = site - blob_centre
-!		r = norm(v)
-!		if (r < rmin) then
-!			rmin = r
-!			minv = site - blob_centre
-!		endif
-!		if (r > rmax) then
-!			rmax = r
-!			maxv = site - blob_centre
-!		endif
-!	endif
-!enddo
-!end subroutine
-!
-!!-----------------------------------------------------------------------------------------
-!!-----------------------------------------------------------------------------------------
-!subroutine CheckUnreachable
-!integer :: kcell, site(3), indx(2)
-!
-!do kcell = 1,nlist
-!	if (cell_list(kcell)%state == DEAD) cycle
-!	site = cell_list(kcell)%site
-!	indx = occupancy(site(1),site(2),site(3))%indx
-!	if (indx(1) == UNREACHABLE_TAG .or. indx(1) == OUTSIDE_TAG) then
-!		write(nflog,'(a,6i6)') 'CheckUnreachable: bad indx: ',kcell,Ncells,site,indx(1)
-!		stop
-!	endif
-!	if (site(3) < zmin) then	
-!		write(nflog,'(a,6i6)') 'CheckUnreachable: bad z: ',kcell,Ncells,site,indx(1)
-!		stop
-!	endif
-!enddo
-!end subroutine
-!
-!!-----------------------------------------------------------------------------------------
-!! The location site0 is just outside the blob.
-!! The aim is to find a cell near site0 that is further from the centre, and move it here.
-!!-----------------------------------------------------------------------------------------
-!subroutine Adjust(site0)
-!integer :: site0(3)
-!integer :: i, site(3), kcell, sitemax(3)
-!real(REAL_KIND) :: r0, r, rmax
-!
-!if (occupancy(site0(1),site0(2),site0(3))%indx(1) /= OUTSIDE_TAG) then
-!	write(nflog,*) 'Error: adjust: site is not OUTSIDE: ',site0
-!	stop
-!endif
-!r0 = cdistance(site0)
-!rmax = 0
-!do i = 1,6
-!	site = site0 + neumann(:,i)
-!	kcell = occupancy(site(1),site(2),site(3))%indx(1)
-!	if (kcell > 0) then
-!		r = cdistance(site)
-!		if (r > r0 .and. r > rmax) then	! move the cell here
-!			rmax = r
-!			sitemax = site
-!		endif
-!	endif
-!enddo
-!if (rmax > 0) then
-!	kcell = occupancy(sitemax(1),sitemax(2),sitemax(3))%indx(1)
-!	cell_list(kcell)%site = site0
-!	occupancy(site0(1),site0(2),site0(3))%indx(1) = kcell
-!	occupancy(sitemax(1),sitemax(2),sitemax(3))%indx(1) = OUTSIDE_TAG
-!endif
-!end subroutine
-
 
 !----------------------------------------------------------------------------------
 ! Makes a slight modification to the Michaelis-Menten function to create a

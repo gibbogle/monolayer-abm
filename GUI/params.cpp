@@ -106,7 +106,7 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
 "Well area (cm2)",
 "Cross-sectional area of the well."},
 
-{"MEDIUM_VOLUME", 0.151, 0, 0,
+{"MEDIUM_VOLUME", 0.2, 0, 0,
 "Medium volume",
 "Volume of the medium in which the spheroid is growing."},
 

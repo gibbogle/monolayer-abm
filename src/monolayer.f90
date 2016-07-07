@@ -23,7 +23,7 @@ integer :: ncpu
 character*(*) :: infile, outfile
 logical :: ok
 character*(64) :: msg
-integer :: ichemo, error
+integer :: ichemo, error, kcell, idrug
 
 ok = .true.
 initialized = .false.
@@ -107,16 +107,7 @@ write(logmsg,*) 'did PlaceCells: Ncells: ',Ncells
 call logger(logmsg)
 if (.not.ok) return
 
-!call CreateBdryList
-
-!if (use_FD) then
-!	call setup_react_diff(ok)
-!	if (.not.ok) return
-!endif
 istep = 0
-!call SetupODEdiff
-!allocate(allstate(MAX_VARS,MAX_CHEMO))
-!allocate(work_rkc(8+5*MAX_VARS))
 do ichemo = 1,TRACER
 	if (chemo(ichemo)%used) then
 		call InitConcs(ichemo)
@@ -1301,7 +1292,7 @@ integer(c_int) :: res
 integer :: kcell, site(3), hour, nthour, kpar=0
 real(REAL_KIND) :: r(3), rmax, tstart, dt, radiation_dose, diam_um, framp, tnow, area, diam
 !integer, parameter :: NT_CONC = 6
-integer :: i, ic, ichemo, ndt, iz
+integer :: i, ic, ichemo, ndt, iz, idrug
 integer :: nvars, ns
 real(REAL_KIND) :: dxc, ex_conc(120*O2_BY_VOL+1)		! just for testing
 logical :: ok = .true.
@@ -1320,10 +1311,6 @@ if (limit_stop) then
 	res = 6
 	return
 endif
-
-!call getVolume(blob_volume,blob_area)
-!blob_radius = sqrt(blob_area/PI)		! number of sites
-!blob_centre = getCentre()   ! units = sites
 
 nthour = 3600/DELTA_T
 dt = DELTA_T/NT_CONC
@@ -1353,13 +1340,9 @@ if (radiation_dose > 0) then
 	write(logmsg,'(a,f6.1)') 'Radiation dose: ',radiation_dose
 	call logger(logmsg)
 endif
-!if (bdry_debug) call CheckBdryList('simulate_step c')
 if (dbug) write(nflog,*) 'GrowCells'
-!write(*,*) 'GrowCells'
 call GrowCells(radiation_dose,DELTA_T,ok)
-!if (bdry_debug) call CheckBdryList('simulate_step d')
 if (dbug) write(nflog,*) 'did GrowCells'
-!write(*,*) 'did GrowCells'
 if (.not.ok) then
 	res = 3
 	return
@@ -1380,7 +1363,6 @@ do it_solve = 1,NT_CONC
     call SetOxygenLevels
 enddo
 !write(nflog,*) 'did Solver'
-
 call CheckDrugPresence
 
 res = 0
