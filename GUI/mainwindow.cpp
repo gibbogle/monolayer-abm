@@ -155,6 +155,10 @@ MainWindow::MainWindow(QWidget *parent)
     rect.setWidth(786);
 #endif
 
+//    videoVTK = new QVideoOutput(this, VTK_SOURCE, vtk->renWin, NULL, NULL);
+    videoFACS = new QVideoOutput(this, QWT_FACS_SOURCE, NULL, qpFACS, NULL);
+    videoField = new QVideoOutput(this, QWT_FIELD_SOURCE, NULL, NULL, field->view);
+
     tabs->setCurrentIndex(9);
     setupPopup();
     goToInputs();
@@ -516,7 +520,7 @@ void MainWindow::showFACS()
     QRadioButton *rb;
 
 //    LOG_MSG("showFACS");
-//    if (showingFACS) LOG_MSG("showingFACS");
+//    if (Global::showingFACS) LOG_MSG("showingFACS");
 //    if (recordingFACS) LOG_MSG("recordingFACS");
     qpFACS = (QwtPlot *)qFindChild<QObject *>(this, "qwtPlot_FACS");
     qpFACS->size();
@@ -688,25 +692,28 @@ void MainWindow::showFACS()
     qpFACS->setAxisMaxMajor(QwtPlot::xBottom, 5);
 
     qpFACS->replot();
-    if (videoFACS->record) {
-        videoFACS->recorder();
-    } else if (actionStop_recording_FACS->isEnabled()) {
-        actionStart_recording_FACS->setEnabled(true);
-        actionStop_recording_FACS->setEnabled(false);
-    }
+//    if (videoFACS->record) {
+//        LOG_MSG("showFACS 6a");
+//        videoFACS->recorder();
+//    } else if (actionStop_recording_FACS->isEnabled()) {
+//        LOG_MSG("showFACS 6b");
+//        actionStart_recording_FACS->setEnabled(true);
+//        actionStop_recording_FACS->setEnabled(false);
+//    }
 }
 
 //--------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------
 void MainWindow::test_histo()
 {
+    QString testlabel = "test";
     int numValues = 20;
     double width = 10, xmin = 0;
     QwtArray<double> values(numValues);
     for (int i=0; i<numValues; i++) {
         values[i] = rand() %100;
     }
-    makeHistoPlot(numValues,xmin,width,values);
+    makeHistoPlot(numValues,xmin,width,values,testlabel);
 }
 
 //--------------------------------------------------------------------------------------------------------
@@ -726,7 +733,8 @@ void MainWindow:: initHistoPlot()
 
 //--------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------
-void MainWindow::makeHistoPlot(int numValues, double xmin, double width,  QwtArray<double> values)
+void MainWindow::makeHistoPlot(int numValues, double xmin, double width,
+                               QwtArray<double> values, QString xlabel)
 {
     QwtPlot *plot;
     double pos;
@@ -785,10 +793,10 @@ void MainWindow::makeHistoPlot(int numValues, double xmin, double width,  QwtArr
         curve->setData(x, y, numValues);
     }
 
+    plot->setAxisTitle(QwtPlot::xBottom, xlabel);
     plot->setAxisScale(QwtPlot::yLeft, 0.0, 100.0);
     plot->setAxisScale(QwtPlot::xBottom, xmin, pos);
     plot->replot();
-//    plot->resize(600,400);
     plot->show();
 
 }
@@ -864,7 +872,7 @@ void MainWindow:: showHisto()
         xmin = Global::histo_vmin[ivar];
         width = (Global::histo_vmax[ivar] - Global::histo_vmin[ivar])/numValues;
     }
-    makeHistoPlot(numValues,xmin,width,values);
+    makeHistoPlot(numValues,xmin,width,values,xlabel);
 }
 
 //-------------------------------------------------------------
@@ -1926,6 +1934,7 @@ void MainWindow::preConnection()
 	// Initialize graphs
     initializeGraphs(newR);
     LOG_MSG("did initializeGraphs");
+    Global::nhisto_bins = lineEdit_nhistobins->text().toInt();
     posdata = false;
 	LOG_MSG("preconnection: done");
 }

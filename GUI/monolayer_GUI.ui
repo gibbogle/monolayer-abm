@@ -42,7 +42,7 @@ padding: 8px
     <item row="0" column="0">
      <widget class="QStackedWidget" name="stackedWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>4</number>
       </property>
       <widget class="QWidget" name="page_input">
        <layout class="QVBoxLayout" name="verticalLayout">
@@ -79,7 +79,7 @@ padding: 8px
            <enum>QTabWidget::West</enum>
           </property>
           <property name="currentIndex">
-           <number>6</number>
+           <number>5</number>
           </property>
           <property name="elideMode">
            <enum>Qt::ElideNone</enum>
@@ -5773,6 +5773,74 @@ padding: 8px
              <string>Time-series Plots</string>
             </property>
            </widget>
+           <widget class="QLabel" name="alabel_mins">
+            <property name="geometry">
+             <rect>
+              <x>950</x>
+              <y>290</y>
+              <width>21</width>
+              <height>16</height>
+             </rect>
+            </property>
+            <property name="text">
+             <string>mins</string>
+            </property>
+           </widget>
+           <widget class="QLabel" name="alabel_nbins">
+            <property name="geometry">
+             <rect>
+              <x>810</x>
+              <y>250</y>
+              <width>131</width>
+              <height>21</height>
+             </rect>
+            </property>
+            <property name="text">
+             <string>Number of histogram bins</string>
+            </property>
+           </widget>
+           <widget class="QLabel" name="alabel_summary_interval">
+            <property name="geometry">
+             <rect>
+              <x>815</x>
+              <y>290</y>
+              <width>101</width>
+              <height>20</height>
+             </rect>
+            </property>
+            <property name="text">
+             <string>Summary interval:</string>
+            </property>
+           </widget>
+           <widget class="QLineEdit" name="lineEdit_summary_interval">
+            <property name="geometry">
+             <rect>
+              <x>910</x>
+              <y>290</y>
+              <width>31</width>
+              <height>16</height>
+             </rect>
+            </property>
+            <property name="text">
+             <string>60</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+           </widget>
+           <widget class="QLineEdit" name="lineEdit_nhistobins">
+            <property name="geometry">
+             <rect>
+              <x>940</x>
+              <y>250</y>
+              <width>21</width>
+              <height>20</height>
+             </rect>
+            </property>
+            <property name="text">
+             <string>20</string>
+            </property>
+           </widget>
           </widget>
           <widget class="QWidget" name="tab_run">
            <attribute name="title">
@@ -7598,138 +7666,13 @@ padding: 8px
        </widget>
       </widget>
       <widget class="QWidget" name="page_FACS">
-       <widget class="QMyGroupBox" name="groupBox_FACS">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>30</y>
-          <width>881</width>
-          <height>621</height>
-         </rect>
-        </property>
-        <property name="title">
-         <string/>
-        </property>
-        <widget class="QwtPlot" name="qwtPlot_FACS">
-         <property name="geometry">
-          <rect>
-           <x>10</x>
-           <y>10</y>
-           <width>630</width>
-           <height>600</height>
-          </rect>
-         </property>
-         <property name="frameShape">
-          <enum>QFrame::StyledPanel</enum>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
-         </property>
-        </widget>
-        <widget class="QGroupBox" name="groupBox_FACS_x_vars">
-         <property name="geometry">
-          <rect>
-           <x>640</x>
-           <y>50</y>
-           <width>121</width>
-           <height>101</height>
-          </rect>
-         </property>
-         <property name="title">
-          <string/>
-         </property>
-        </widget>
-        <widget class="QGroupBox" name="groupBox_FACS_y_vars">
-         <property name="geometry">
-          <rect>
-           <x>760</x>
-           <y>50</y>
-           <width>121</width>
-           <height>101</height>
-          </rect>
-         </property>
-         <property name="title">
-          <string/>
-         </property>
-        </widget>
-        <widget class="QCheckBox" name="checkBox_FACS_log_x">
-         <property name="geometry">
-          <rect>
-           <x>650</x>
-           <y>10</y>
-           <width>71</width>
-           <height>18</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Log scale?</string>
-         </property>
-        </widget>
-        <widget class="QCheckBox" name="checkBox_FACS_log_y">
-         <property name="geometry">
-          <rect>
-           <x>770</x>
-           <y>10</y>
-           <width>71</width>
-           <height>18</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Log scale?</string>
-         </property>
-        </widget>
-        <widget class="QLabel" name="alabel_FACS_x">
-         <property name="geometry">
-          <rect>
-           <x>680</x>
-           <y>30</y>
-           <width>41</width>
-           <height>16</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>X axis</string>
-         </property>
-        </widget>
-        <widget class="QLabel" name="alabel_FACS_y">
-         <property name="geometry">
-          <rect>
-           <x>800</x>
-           <y>30</y>
-           <width>41</width>
-           <height>16</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Y axis</string>
-         </property>
-        </widget>
-       </widget>
-       <widget class="QLabel" name="alabel__FACS">
-        <property name="geometry">
-         <rect>
-          <x>280</x>
-          <y>-10</y>
-          <width>141</width>
-          <height>41</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <pointsize>20</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>FACS</string>
-        </property>
-       </widget>
        <widget class="QMyGroupBox" name="groupBox_Histo">
         <property name="geometry">
          <rect>
-          <x>890</x>
-          <y>30</y>
-          <width>761</width>
-          <height>621</height>
+          <x>660</x>
+          <y>0</y>
+          <width>611</width>
+          <height>511</height>
          </rect>
         </property>
         <property name="title">
@@ -7743,8 +7686,8 @@ padding: 8px
           <rect>
            <x>10</x>
            <y>10</y>
-           <width>630</width>
-           <height>600</height>
+           <width>481</width>
+           <height>491</height>
           </rect>
          </property>
          <property name="frameShape">
@@ -7757,9 +7700,9 @@ padding: 8px
         <widget class="QGroupBox" name="groupBox_Histo_y_vars">
          <property name="geometry">
           <rect>
-           <x>640</x>
+           <x>500</x>
            <y>90</y>
-           <width>121</width>
+           <width>101</width>
            <height>101</height>
           </rect>
          </property>
@@ -7770,9 +7713,9 @@ padding: 8px
         <widget class="QGroupBox" name="groupBox_celltype">
          <property name="geometry">
           <rect>
-           <x>640</x>
+           <x>500</x>
            <y>10</y>
-           <width>120</width>
+           <width>101</width>
            <height>80</height>
           </rect>
          </property>
@@ -7836,8 +7779,8 @@ padding: 8px
           <rect>
            <x>10</x>
            <y>10</y>
-           <width>630</width>
-           <height>600</height>
+           <width>481</width>
+           <height>491</height>
           </rect>
          </property>
          <property name="frameShape">
@@ -7850,8 +7793,8 @@ padding: 8px
         <widget class="QGroupBox" name="groupBox_histotype">
          <property name="geometry">
           <rect>
-           <x>640</x>
-           <y>549</y>
+           <x>500</x>
+           <y>440</y>
            <width>81</width>
            <height>61</height>
           </rect>
@@ -7898,9 +7841,9 @@ padding: 8px
         <widget class="QCheckBox" name="checkBox_histo_logscale">
          <property name="geometry">
           <rect>
-           <x>650</x>
-           <y>520</y>
-           <width>131</width>
+           <x>500</x>
+           <y>410</y>
+           <width>81</width>
            <height>18</height>
           </rect>
          </property>
@@ -7912,23 +7855,180 @@ padding: 8px
          </property>
         </widget>
        </widget>
-       <widget class="QLabel" name="alabel__Histo">
+       <widget class="QGroupBox" name="groupBox_FACS_params">
         <property name="geometry">
          <rect>
-          <x>1160</x>
+          <x>0</x>
           <y>-10</y>
-          <width>141</width>
-          <height>41</height>
+          <width>651</width>
+          <height>521</height>
          </rect>
         </property>
-        <property name="font">
-         <font>
-          <pointsize>20</pointsize>
-         </font>
+        <property name="title">
+         <string/>
         </property>
-        <property name="text">
-         <string>Histogram</string>
-        </property>
+        <widget class="QWidget" name="verticalLayoutWidget">
+         <property name="geometry">
+          <rect>
+           <x>540</x>
+           <y>10</y>
+           <width>101</width>
+           <height>491</height>
+          </rect>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_3">
+          <item>
+           <widget class="QLabel" name="alabel_FACS_x">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>20</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>16777215</width>
+              <height>20</height>
+             </size>
+            </property>
+            <property name="font">
+             <font>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string> X axis</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="checkBox_FACS_log_x">
+            <property name="text">
+             <string>Log scale?</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupBox_FACS_x_vars">
+            <property name="minimumSize">
+             <size>
+              <width>101</width>
+              <height>101</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>101</width>
+              <height>200</height>
+             </size>
+            </property>
+            <property name="title">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="verticalSpacer">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QLabel" name="alabel_FACS_y">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>20</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>16777215</width>
+              <height>20</height>
+             </size>
+            </property>
+            <property name="font">
+             <font>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string> Y axis</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="checkBox_FACS_log_y">
+            <property name="text">
+             <string>Log scale?</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupBox_FACS_y_vars">
+            <property name="minimumSize">
+             <size>
+              <width>101</width>
+              <height>101</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>101</width>
+              <height>200</height>
+             </size>
+            </property>
+            <property name="title">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="verticalLayoutWidget_2">
+         <property name="geometry">
+          <rect>
+           <x>10</x>
+           <y>10</y>
+           <width>521</width>
+           <height>511</height>
+          </rect>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_4" stretch="0">
+          <item>
+           <widget class="QMyGroupBox" name="groupBox_FACS">
+            <property name="title">
+             <string/>
+            </property>
+            <widget class="QwtPlot" name="qwtPlot_FACS">
+             <property name="geometry">
+              <rect>
+               <x>10</x>
+               <y>10</y>
+               <width>501</width>
+               <height>491</height>
+              </rect>
+             </property>
+             <property name="frameShape">
+              <enum>QFrame::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Raised</enum>
+             </property>
+            </widget>
+           </widget>
+          </item>
+         </layout>
+        </widget>
        </widget>
       </widget>
      </widget>

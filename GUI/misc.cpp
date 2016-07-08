@@ -215,9 +215,9 @@ void ExecThread::run()
         sleep(10);
         bool updated = false;
 		if (paused && !updated) {
-			snapshot();
-            sprintf(msg,"got snapshot: i: %d",i);
-            LOG_MSG(msg);
+//			snapshot();
+//            sprintf(msg,"got snapshot: i: %d",i);
+//            LOG_MSG(msg);
             updated = true;
 		}
         while(paused || Global::leftb) {
@@ -248,9 +248,9 @@ void ExecThread::run()
 //            get_distdata(&Global::dist_nv, Global::distParams, Global::distData);
 //            get_concdata(&Global::conc_nvars, &Global::conc_nc_ex, &Global::conc_dx_ex, Global::concData);
 //            get_ic_concdata(&Global::conc_nvars, &Global::conc_nc_ic, &Global::conc_dx_ic, Global::IC_concData);
-//            if (Global::showingFACS || Global::recordingFACS) {
-//                getFACS();
-//            }
+            if (Global::showingFACS || Global::recordingFACS) {
+                getFACS();
+            }
             mutex1.unlock();
             if (Global::showingFACS || Global::recordingFACS) {
                 emit facs_update();
@@ -265,13 +265,13 @@ void ExecThread::run()
             res = -1;
             break;
         }
-        if (i%Global::nt_vtk == 0) {
-            if (Global::showingVTK || Global::recordingVTK) {
-				snapshot();
-                Global::istep = i;
-                sleep(10);
-			}
-		}
+//        if (i%Global::nt_vtk == 0) {
+//            if (Global::showingVTK || Global::recordingVTK) {
+//				snapshot();
+//                Global::istep = i;
+//                sleep(10);
+//			}
+//		}
         if (stopped) {
             res = -1;
             break;
@@ -352,14 +352,13 @@ void ExecThread::getProfiles()
 //-----------------------------------------------------------------------------------------
 void ExecThread::getFACS()
 {
-    return;
-//    get_nfacs(&Global::nFACS_cells);
+    get_nfacs(&Global::nFACS_cells);
     if (!Global::FACS_data || Global::nFACS_cells*Global::nvars_used > Global::nFACS_dim) {
         if (Global::FACS_data) free(Global::FACS_data);
         Global::nFACS_dim = 3*Global::nFACS_cells*Global::nvars_used;   // 3* to avoid excessive malloc/free
         Global::FACS_data = (double *)malloc(Global::nFACS_dim*sizeof(double));
     }
-//    get_facs(Global::FACS_data);
+    get_facs(Global::FACS_data);
     if (!Global::histo_data || Global::nhisto_bins*Global::nvars_used > Global::nhisto_dim) {
         if (Global::histo_data) free(Global::histo_data);
         if (Global::histo_data_log) free(Global::histo_data_log);
@@ -367,8 +366,8 @@ void ExecThread::getFACS()
         Global::histo_data = (double *)malloc(Global::nhisto_dim*sizeof(double));
         Global::histo_data_log = (double *)malloc(Global::nhisto_dim*sizeof(double));
     }
-//    get_histo(Global::nhisto_bins, Global::histo_data, Global::histo_vmin, Global::histo_vmax,
-//              Global::histo_data_log, Global::histo_vmin_log, Global::histo_vmax_log);
+    get_histo(Global::nhisto_bins, Global::histo_data, Global::histo_vmin, Global::histo_vmax,
+              Global::histo_data_log, Global::histo_vmin_log, Global::histo_vmax_log);
 }
 
 //-----------------------------------------------------------------------------------------

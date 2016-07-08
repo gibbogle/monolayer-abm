@@ -362,7 +362,6 @@ do kcell = 1,nlist
 enddo	
 end subroutine
 
-
 !--------------------------------------------------------------------------------
 !--------------------------------------------------------------------------------
 function getstatus(cp) result(status)
@@ -448,6 +447,254 @@ do k = 1,n
 enddo
 end subroutine
 
+!-----------------------------------------------------------------------------------------
+! Get number of live cells
+!-----------------------------------------------------------------------------------------
+subroutine get_nFACS(n) BIND(C)
+!DEC$ ATTRIBUTES DLLEXPORT :: get_nfacs
+use, intrinsic :: iso_c_binding
+integer(c_int) :: n
+integer :: k, kcell
+
+!call logger('get_nFACS')
+n = 0
+do kcell = 1,nlist
+	if (cell_list(kcell)%state == DEAD) cycle
+	n = n+1
+enddo
+end subroutine
+
+!-----------------------------------------------------------------------------------------
+!-----------------------------------------------------------------------------------------
+subroutine get_FACS(facs_data) BIND(C)
+!DEC$ ATTRIBUTES DLLEXPORT :: get_facs
+use, intrinsic :: iso_c_binding
+real(c_double) :: val, facs_data(*)
+integer :: k, kcell, iextra, ichemo, ivar, nvars, var_index(32)
+real(REAL_KIND) :: cfse_min
+
+!call logger('get_FACS')
+nvars = 1	! CFSE
+var_index(nvars) = 0
+do ichemo = 1,MAX_CHEMO
+	if (.not.chemo(ichemo)%used) cycle
+	nvars = nvars + 1
+	var_index(nvars) = ichemo
+enddo
+do iextra = 1,N_EXTRA-1
+	nvars = nvars + 1
+	var_index(nvars) = MAX_CHEMO + iextra
+enddo
+cfse_min = 1.0e20
+k = 0
+do kcell = 1,nlist
+	if (cell_list(kcell)%state == DEAD) cycle
+!	k = k+1
+!	facs_data(k) = cell_list(kcell)%CFSE
+!	k = k+1
+!	facs_data(k) = cell_list(kcell)%dVdt
+!	k = k+1
+!	facs_data(k) = cell_list(kcell)%conc(OXYGEN)
+!	if (cell_list(kcell)%conc(OXYGEN) <= 0.00001 .or. cell_list(kcell)%dVdt < 2.0e-6) then
+!		write(nflog,'(2i6,2e12.3)') istep,kcell,cell_list(kcell)%dVdt,cell_list(kcell)%conc(OXYGEN)
+!	endif
+	do ivar = 1,nvars
+		ichemo = var_index(ivar)
+		if (ichemo == 0) then
+			val = cell_list(kcell)%CFSE
+			cfse_min = min(val,cfse_min)
+		elseif (ichemo <= MAX_CHEMO) then
+			val = cell_list(kcell)%conc(ichemo)
+		elseif (ichemo == GROWTH_RATE) then
+			val = cell_list(kcell)%dVdt
+		elseif (ichemo == CELL_VOLUME) then
+			val = cell_list(kcell)%volume
+		elseif (ichemo == O2_BY_VOL) then
+			val = cell_list(kcell)%volume*cell_list(kcell)%conc(OXYGEN)
+		endif
+		k = k+1
+		facs_data(k) = val
+	enddo
+enddo
+end subroutine
+
+!-----------------------------------------------------------------------------------------
+! nhisto is the number of histogram boxes
+! vmax(ivar) is the maximum value for variable ivar
+! Probably need to adjust vmax() to a roundish value
+!
+! Compute 3 distributions: 1 = both cell types
+!                          2 = type 1
+!                          3 = type 2
+! Stack three cases in vmax() and histo_data()
+!-----------------------------------------------------------------------------------------
+subroutine get_histo(nhisto, histo_data, vmin, vmax, histo_data_log, vmin_log, vmax_log) BIND(C)
+!DEC$ ATTRIBUTES DLLEXPORT :: get_histo
+use, intrinsic :: iso_c_binding
+integer(c_int),value :: nhisto
+real(c_double) :: vmin(*), vmax(*), histo_data(*)
+real(c_double) :: vmin_log(*), vmax_log(*), histo_data_log(*)
+real(REAL_KIND) :: val, val_log
+integer :: n(3), i, ih, k, kcell, ict, ichemo, ivar, nvars, var_index(32)
+integer,allocatable :: cnt(:,:,:)
+real(REAL_KIND),allocatable :: dv(:,:), valmin(:,:), valmax(:,:)
+integer,allocatable :: cnt_log(:,:,:)
+real(REAL_KIND),allocatable :: dv_log(:,:), valmin_log(:,:), valmax_log(:,:)
+!real(REAL_KIND) :: vmin_log(100), vmax_log(100)
+!real(REAL_KIND),allocatable :: histo_data_log(:)
+
+!call logger('get_histo')
+nvars = 1	! CFSE
+var_index(nvars) = 0
+do ichemo = 1,MAX_CHEMO
+	if (.not.chemo(ichemo)%used) cycle
+	nvars = nvars + 1
+	var_index(nvars) = ichemo
+enddo
+nvars = nvars + 1
+var_index(nvars) = GROWTH_RATE
+nvars = nvars + 1
+var_index(nvars) = CELL_VOLUME
+nvars = nvars + 1
+var_index(nvars) = O2_BY_VOL
+
+allocate(cnt(3,nvars,nhisto))
+allocate(dv(3,nvars))
+allocate(valmin(3,nvars))
+allocate(valmax(3,nvars))
+allocate(cnt_log(3,nvars,nhisto))
+allocate(dv_log(3,nvars))
+allocate(valmin_log(3,nvars))
+allocate(valmax_log(3,nvars))
+!allocate(histo_data_log(10000))
+cnt = 0
+valmin = 1.0e10
+valmax = -1.0e10
+cnt_log = 0
+valmin_log = 1.0e10
+valmax_log = -1.0e10
+n = 0
+do kcell = 1,nlist
+	if (cell_list(kcell)%state == DEAD) cycle
+	ict = cell_list(kcell)%celltype
+	do ivar = 1,nvars
+		ichemo = var_index(ivar)
+		if (ichemo == 0) then
+			val = cell_list(kcell)%CFSE
+		elseif (ichemo <= MAX_CHEMO) then
+			val = cell_list(kcell)%conc(ichemo)
+		elseif (ichemo == GROWTH_RATE) then
+			val = cell_list(kcell)%dVdt
+		elseif (ichemo == CELL_VOLUME) then
+			val = Vcell_pL*cell_list(kcell)%volume
+		elseif (ichemo == O2_BY_VOL) then
+			val = cell_list(kcell)%conc(OXYGEN)*Vcell_pL*cell_list(kcell)%volume
+		endif
+		valmax(ict+1,ivar) = max(valmax(ict+1,ivar),val)	! cell type 1 or 2
+		valmax(1,ivar) = max(valmax(1,ivar),val)			! both
+		if (val <= 1.0e-8) then
+			val_log = -8
+		else
+			val_log = log10(val)
+		endif
+		valmin_log(ict+1,ivar) = min(valmin_log(ict+1,ivar),val_log)	! cell type 1 or 2
+		valmin_log(1,ivar) = min(valmin_log(1,ivar),val_log)			! both
+		valmax_log(ict+1,ivar) = max(valmax_log(ict+1,ivar),val_log)	! cell type 1 or 2
+		valmax_log(1,ivar) = max(valmax_log(1,ivar),val_log)			! both
+	enddo
+	n(ict+1) = n(ict+1) + 1
+	n(1) = n(1) + 1
+enddo
+do ivar = 1,nvars
+	ichemo = var_index(ivar)
+	if (ichemo == CELL_VOLUME) then
+		valmin(:,ivar) = Vcell_pL*0.8
+		valmin_log(:,ivar) = log10(Vcell_pL*0.8)
+	else
+		valmin(:,ivar) = 0
+	endif
+enddo
+
+dv = (valmax - valmin)/nhisto
+!write(nflog,*) 'dv'
+!write(nflog,'(e12.3)') dv
+dv_log = (valmax_log - valmin_log)/nhisto
+!write(nflog,*) 'dv_log'
+!write(nflog,'(e12.3)') dv_log
+do kcell = 1,nlist
+	if (cell_list(kcell)%state == DEAD) cycle
+	ict = cell_list(kcell)%celltype
+	do ivar = 1,nvars
+		ichemo = var_index(ivar)
+		if (ichemo == 0) then
+			val = cell_list(kcell)%CFSE
+		elseif (ichemo <= MAX_CHEMO) then
+			val = cell_list(kcell)%conc(ichemo)
+		elseif (ichemo == GROWTH_RATE) then
+			val = cell_list(kcell)%dVdt
+		elseif (ichemo == CELL_VOLUME) then
+			val = Vcell_pL*cell_list(kcell)%volume
+		elseif (ichemo == O2_BY_VOL) then
+			val = cell_list(kcell)%conc(OXYGEN)*Vcell_pL*cell_list(kcell)%volume
+		endif
+		k = (val-valmin(1,ivar))/dv(1,ivar) + 1
+		k = min(k,nhisto)
+		k = max(k,1)
+		cnt(1,ivar,k) = cnt(1,ivar,k) + 1
+		k = (val-valmin(ict+1,ivar))/dv(ict+1,ivar) + 1
+		k = min(k,nhisto)
+		k = max(k,1)
+		cnt(ict+1,ivar,k) = cnt(ict+1,ivar,k) + 1
+		if (val <= 1.0e-8) then
+			val_log = -8
+		else
+			val_log = log10(val)
+		endif
+		k = (val_log-valmin_log(1,ivar))/dv_log(1,ivar) + 1
+		k = min(k,nhisto)
+		k = max(k,1)
+		cnt_log(1,ivar,k) = cnt_log(1,ivar,k) + 1
+		k = (val_log-valmin_log(ict+1,ivar))/dv_log(ict+1,ivar) + 1
+		k = min(k,nhisto)
+		k = max(k,1)
+		cnt_log(ict+1,ivar,k) = cnt_log(ict+1,ivar,k) + 1
+	enddo
+enddo
+
+do i = 1,3
+	if (n(i) == 0) then
+		vmin((i-1)*nvars+1:i*nvars) = 0
+		vmax((i-1)*nvars+1:i*nvars) = 0
+		histo_data((i-1)*nvars*nhisto+1:i*nhisto*nvars) = 0
+		vmin_log((i-1)*nvars+1:i*nvars) = 0
+		vmax_log((i-1)*nvars+1:i*nvars) = 0
+		histo_data_log((i-1)*nvars*nhisto+1:i*nhisto*nvars) = 0
+	else
+		do ivar = 1,nvars
+			vmin((i-1)*nvars+ivar) = valmin(i,ivar)
+			vmax((i-1)*nvars+ivar) = valmax(i,ivar)
+			do ih = 1,nhisto
+				k = (i-1)*nvars*nhisto + (ivar-1)*nhisto + ih
+				histo_data(k) = (100.*cnt(i,ivar,ih))/n(i)
+			enddo
+			vmin_log((i-1)*nvars+ivar) = valmin_log(i,ivar)
+			vmax_log((i-1)*nvars+ivar) = valmax_log(i,ivar)
+			do ih = 1,nhisto
+				k = (i-1)*nvars*nhisto + (ivar-1)*nhisto + ih
+				histo_data_log(k) = (100.*cnt_log(i,ivar,ih))/n(i)
+			enddo
+		enddo
+	endif
+enddo
+deallocate(cnt)
+deallocate(dv)
+deallocate(valmin)
+deallocate(valmax)
+deallocate(cnt_log)
+deallocate(dv_log)
+deallocate(valmin_log)
+deallocate(valmax_log)
+end subroutine
 
 !-----------------------------------------------------------------------------------------
 !-----------------------------------------------------------------------------------------

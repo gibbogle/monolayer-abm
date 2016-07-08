@@ -222,7 +222,7 @@ private:
     void setGraphsActive();
     void initDrugComboBoxes();
     void test_histo();
-    void makeHistoPlot(int numValues, double xmin, double width, QVector<double> values);
+    void makeHistoPlot(int numValues, double xmin, double width, QVector<double> values, QString xlabel);
     void showBool(QString, bool);
 
 	double erf(double z);
