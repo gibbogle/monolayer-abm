@@ -352,12 +352,14 @@ void ExecThread::getProfiles()
 //-----------------------------------------------------------------------------------------
 void ExecThread::getFACS()
 {
+//    LOG_MSG("get_nfacs");
     get_nfacs(&Global::nFACS_cells);
     if (!Global::FACS_data || Global::nFACS_cells*Global::nvars_used > Global::nFACS_dim) {
         if (Global::FACS_data) free(Global::FACS_data);
         Global::nFACS_dim = 3*Global::nFACS_cells*Global::nvars_used;   // 3* to avoid excessive malloc/free
         Global::FACS_data = (double *)malloc(Global::nFACS_dim*sizeof(double));
     }
+//    LOG_MSG("get_facs");
     get_facs(Global::FACS_data);
     if (!Global::histo_data || Global::nhisto_bins*Global::nvars_used > Global::nhisto_dim) {
         if (Global::histo_data) free(Global::histo_data);
@@ -366,8 +368,10 @@ void ExecThread::getFACS()
         Global::histo_data = (double *)malloc(Global::nhisto_dim*sizeof(double));
         Global::histo_data_log = (double *)malloc(Global::nhisto_dim*sizeof(double));
     }
+//    LOG_MSG("get_histo");
     get_histo(Global::nhisto_bins, Global::histo_data, Global::histo_vmin, Global::histo_vmax,
               Global::histo_data_log, Global::histo_vmin_log, Global::histo_vmax_log);
+//    LOG_MSG("did get_histo");
 }
 
 //-----------------------------------------------------------------------------------------

@@ -100,7 +100,7 @@ void Field::setCellConstituentButtons(QGroupBox *gbox, QButtonGroup *bg, QVBoxLa
     QString name, str, ivar_str;
     QRadioButton *rb;
 
-    LOG_QMSG("setCellConstituentButtons: " + tag);
+//    LOG_QMSG("setCellConstituentButtons: " + tag);
     if (rb_list->length() != 0) {
         LOG_MSG("rb_list not NULL, delete it");
         for (ivar=0; ivar<rb_list->length(); ivar++) {
@@ -111,14 +111,14 @@ void Field::setCellConstituentButtons(QGroupBox *gbox, QButtonGroup *bg, QVBoxLa
         rb_list->clear();
     }
     if (!*vbox) {
-        LOG_MSG("vbox = NULL, create it");
+//        LOG_MSG("vbox = NULL, create it");
         *vbox = new QVBoxLayout;
         gbox->setLayout(*vbox);
     }
     name = "rb_cell_constituent_"+tag;
-    LOG_QMSG(name);
-    sprintf(msg,"rb_list: %p vbox: %p bg: %p nvars_used: %d",rb_list,*vbox,bg,Global::nvars_used);
-    LOG_MSG(msg);
+//    LOG_QMSG(name);
+//    sprintf(msg,"rb_list: %p vbox: %p bg: %p nvars_used: %d",rb_list,*vbox,bg,Global::nvars_used);
+//    LOG_MSG(msg);
     for (ivar=0; ivar<Global::nvars_used; ivar++) {
         ivar_str = QString::number(ivar);
         str = Global::var_string[ivar];
@@ -131,7 +131,7 @@ void Field::setCellConstituentButtons(QGroupBox *gbox, QButtonGroup *bg, QVBoxLa
         rb_list->append(rb);
 //        LOG_QMSG(rb->objectName());
     }
-    LOG_MSG("added buttons");
+//    LOG_MSG("added buttons");
     if (tag.contains("FACS")) {
         (*rb_list)[0]->setChecked(true);   // CFSE
     } else {
@@ -139,11 +139,11 @@ void Field::setCellConstituentButtons(QGroupBox *gbox, QButtonGroup *bg, QVBoxLa
     }
     QRect rect = gbox->geometry();
     rect.setHeight(25*Global::nvars_used);
-    LOG_MSG("gbox->setGeometry");
+//    LOG_MSG("gbox->setGeometry");
     gbox->setGeometry(rect);
-    LOG_MSG("gbox->show");
+//    LOG_MSG("gbox->show");
     gbox->show();
-    LOG_QMSG("did setCellConstituentButtons: " + tag);
+//    LOG_QMSG("did setCellConstituentButtons: " + tag);
 }
 
 
@@ -173,7 +173,7 @@ void Field::setFieldConstituentButtons(QGroupBox *gbox, QButtonGroup *bg, QVBoxL
         rb_list->clear();
     }
     if (!*vbox) {
-        LOG_MSG("vbox = NULL, create it");
+//        LOG_MSG("vbox = NULL, create it");
         *vbox = new QVBoxLayout;
         gbox->setLayout(*vbox);
     }

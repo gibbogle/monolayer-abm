@@ -191,8 +191,9 @@ private:
     void createActions();
 	void createLists();
 	void drawDistPlots();
-    void initFACSPlot();
-    void initHistoPlot();
+    void createFACSPage();
+//    void initFACSPlot();
+//    void initHistoPlot();
     void setupParamList();
 	void loadParams();
 	void reloadParams();
@@ -277,6 +278,17 @@ private:
 	QwtPlotCurve *curve_list[5];
 
 	QList<QWidget *> widget_list;
+
+    QGroupBox *groupBox_FACS;
+    QGroupBox *groupBox_FACS_x_vars;
+    QGroupBox *groupBox_FACS_y_vars;
+    QGroupBox *groupBox_Histo;
+    QGroupBox *groupBox_Histo_x_vars;
+    QCheckBox *checkBox_FACS_log_x;
+    QCheckBox *checkBox_FACS_log_y;
+    QCheckBox *checkBox_histo_logscale;
+    QButtonGroup *buttonGroup_celltype;
+    QButtonGroup *buttonGroup_histotype;
 
     QwtPlot *qpFACS;
     QwtPlotCurve *curveFACS;

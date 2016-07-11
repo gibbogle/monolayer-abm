@@ -122,22 +122,25 @@ MainWindow::MainWindow(QWidget *parent)
         pGraph[i] = NULL;
     LOG_QMSG("did Graphs");
 
+    createFACSPage();
+    LOG_MSG("did createFACSPage");
+
     createLists();
     LOG_QMSG("did createLists");
     createActions();
     LOG_QMSG("did createActions");
     drawDistPlots();
     LOG_QMSG("did drawDistPlots");
-    initFACSPlot();
-    LOG_QMSG("did initFACSPlot");
-    initHistoPlot();
-    LOG_QMSG("did initHistoPlot");
+//    initFACSPlot();
+//    LOG_QMSG("did initFACSPlot");
+//    initHistoPlot();
+//    LOG_QMSG("did initHistoPlot");
     loadParams();
     LOG_QMSG("Did loadparams");
     paramSaved = true;
 
     SetupProtocol();
-    LOG_MSG("did SeupProtocol");
+    LOG_MSG("did SetupProtocol");
 
     writeout();
     LOG_MSG("did writeout");
@@ -164,11 +167,122 @@ MainWindow::MainWindow(QWidget *parent)
     goToInputs();
 }
 
+void MainWindow::createFACSPage()
+{
+    LOG_MSG("createFACSPage");
+    groupBox_FACS = new QGroupBox;
+    QHBoxLayout *layout1 = new QHBoxLayout;
+    layout1->setMargin(1);
+    qpFACS = new QwtPlot;
+    layout1->addWidget(qpFACS);
+    QGroupBox *vbox1 = new QGroupBox;
+    QVBoxLayout *layout1v = new QVBoxLayout;
+    layout1v->setMargin(1);
+    vbox1->setLayout(layout1v);
+    vbox1->setMinimumWidth(101);
+    vbox1->setMaximumWidth(101);
+    layout1v->setStretch(0,0);
+    QLabel *xAxisLabel = new QLabel(" X axis");
+    checkBox_FACS_log_x = new QCheckBox;
+    checkBox_FACS_log_x->setText("Log scale?");
+    groupBox_FACS_x_vars = new QGroupBox;
+    groupBox_FACS_x_vars->setMinimumHeight(101);
+    layout1v->addWidget(xAxisLabel);
+    layout1v->addWidget(checkBox_FACS_log_x);
+    layout1v->addWidget(groupBox_FACS_x_vars);
+    layout1v->addSpacing(20);
+    QLabel *yAxisLabel = new QLabel(" Y axis");
+    checkBox_FACS_log_y = new QCheckBox;
+    checkBox_FACS_log_y->setText("Log scale?");
+    groupBox_FACS_y_vars = new QGroupBox;
+    groupBox_FACS_y_vars->setMinimumHeight(101);
+    layout1v->addWidget(yAxisLabel);
+    layout1v->addWidget(checkBox_FACS_log_y);
+    layout1v->addWidget(groupBox_FACS_y_vars);
+    layout1v->addStretch(1);
+    layout1->addWidget(vbox1);
+    groupBox_FACS->setLayout(layout1);
+
+    groupBox_Histo = new QGroupBox;
+    QGridLayout *layout2a = new QGridLayout;
+    layout2a->setMargin(1);
+    qpHistoBar = new QwtPlot;
+    qpHistoLine = new QwtPlot;
+    layout2a->addWidget(qpHistoBar,0,0);
+    layout2a->addWidget(qpHistoLine,0,0);
+    QGroupBox *vBox2 = new QGroupBox;
+    QVBoxLayout *layout2v = new QVBoxLayout;
+    layout2v->setMargin(1);
+    vBox2->setLayout(layout2v);
+    vBox2->setMinimumWidth(101);
+    vBox2->setMaximumWidth(101);
+    QGroupBox *groupBox_celltype = new QGroupBox;
+    groupBox_celltype->setMinimumHeight(80);
+    groupBox_celltype->setMaximumHeight(80);
+    groupBox_Histo_x_vars = new QGroupBox;
+    groupBox_Histo_x_vars->setMinimumHeight(101);
+    checkBox_histo_logscale = new QCheckBox;
+    checkBox_histo_logscale->setText("Log scale?");
+    QGroupBox *groupBox_histotype = new QGroupBox;
+    groupBox_histotype->setMinimumHeight(60);
+    groupBox_histotype->setMaximumHeight(60);
+    layout2v->addWidget(groupBox_celltype);
+    layout2v->addSpacing(20);
+    layout2v->addWidget(groupBox_Histo_x_vars);
+    layout2v->addStretch(1);
+    layout2v->addWidget(checkBox_histo_logscale);
+    layout2v->addWidget(groupBox_histotype);
+
+    layout2a->addWidget(vBox2,0,1);
+    groupBox_Histo->setLayout(layout2a);
+
+    QRadioButton *radioButton_celltype_1 = new QRadioButton("Cell type 1");
+    QRadioButton *radioButton_celltype_2 = new QRadioButton("Cell type 2");
+    QRadioButton *radioButton_celltype_3 = new QRadioButton("Both types");
+    buttonGroup_celltype = new QButtonGroup;
+    buttonGroup_celltype->addButton(radioButton_celltype_1);
+    buttonGroup_celltype->addButton(radioButton_celltype_2);
+    buttonGroup_celltype->addButton(radioButton_celltype_3);
+    QVBoxLayout *vbox_rb1 = new QVBoxLayout;
+    vbox_rb1->addWidget(radioButton_celltype_1);
+    vbox_rb1->addWidget(radioButton_celltype_2);
+    vbox_rb1->addWidget(radioButton_celltype_3);
+    radioButton_celltype_1->setChecked(true);
+    groupBox_celltype->setLayout(vbox_rb1);
+
+    QRadioButton *radioButton_histotype_1 = new QRadioButton("Bar plot");
+    QRadioButton *radioButton_histotype_2 = new QRadioButton("Line plot");
+    buttonGroup_histotype = new QButtonGroup;
+    buttonGroup_histotype->addButton(radioButton_histotype_1);
+    buttonGroup_histotype->setId(radioButton_histotype_1,1);
+    buttonGroup_histotype->addButton(radioButton_histotype_2);
+    buttonGroup_histotype->setId(radioButton_histotype_2,2);
+    QVBoxLayout *vbox_rb2 = new QVBoxLayout;
+    vbox_rb2->addWidget(radioButton_histotype_1);
+    vbox_rb2->addWidget(radioButton_histotype_2);
+    radioButton_histotype_1->setChecked(true);
+    groupBox_histotype->setLayout(vbox_rb2);
+
+    QHBoxLayout *biglayout = new QHBoxLayout;
+    biglayout->addWidget(groupBox_FACS,1);
+    biglayout->addWidget(groupBox_Histo,1);
+    page_FACS->setLayout(biglayout);
+
+    qpFACS->clear();
+    qpFACS->setTitle("FACS");
+    qpFACS->replot();
+    qpHistoBar->setTitle("Histogram");
+    qpHistoBar->replot();
+    qpHistoLine->hide();
+    connect((QObject *)groupBox_FACS,SIGNAL(groupBoxClicked(QString)),this,SLOT(processGroupBoxClick(QString)));
+    connect((QObject *)groupBox_Histo,SIGNAL(groupBoxClicked(QString)),this,SLOT(processGroupBoxClick(QString)));
+}
+
 //--------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------
 void MainWindow::createActions()
 {
-    LOG_MSG("createActions 0");
+//    LOG_MSG("createActions 0");
 	action_stop->setEnabled(false);
     action_pause->setEnabled(false);
     action_inputs->setEnabled(false);
@@ -180,7 +294,7 @@ void MainWindow::createActions()
     action_show_gradient2D->setEnabled(false);
     action_field->setEnabled(false);
     text_more->setEnabled(false);
-    LOG_MSG("createActions 1");
+//    LOG_MSG("createActions 1");
     connect(action_open_input, SIGNAL(triggered()), this, SLOT(readInputFile()));
     connect(action_load_results, SIGNAL(triggered()), this, SLOT(loadResultFile()));
     connect(action_saveAs, SIGNAL(triggered()), this, SLOT(saveAs()));
@@ -198,9 +312,10 @@ void MainWindow::createActions()
     connect(checkBox_FACS_log_x, SIGNAL(stateChanged(int)), this, SIGNAL(facs_update()));
     connect(checkBox_FACS_log_y, SIGNAL(stateChanged(int)), this, SIGNAL(facs_update()));
     connect(buttonGroup_histo, SIGNAL(buttonClicked(QAbstractButton*)), this, SIGNAL(histo_update()));
+    connect(buttonGroup_histotype, SIGNAL(buttonClicked(QAbstractButton*)), this, SIGNAL(histo_update()));
 
     connect(this,SIGNAL(pause_requested()),SLOT(pauseServer()));
-    LOG_MSG("createActions 2");
+//    LOG_MSG("createActions 2");
 
     for (int i=0; i<parm->nInfolabel; i++) {
         QString tag;
@@ -209,7 +324,7 @@ void MainWindow::createActions()
         QLabel *label = findChild<QLabel *>(objName);
         connect((QObject *)label, SIGNAL(labelClicked(QString)), this, SLOT(showMore(QString)));
     }
-    LOG_MSG("createActions 3");
+//    LOG_MSG("createActions 3");
     for (int i=0; i<nLabels; i++) {
 		QLabel *label = label_list[i];
 		QString label_str = label->objectName();
@@ -217,7 +332,7 @@ void MainWindow::createActions()
 			connect((QObject *)label, SIGNAL(labelClicked(QString)), this, SLOT(showMore(QString)));
 		}
 	}
-    LOG_MSG("createActions 4");
+//    LOG_MSG("createActions 4");
 
     for (int i=0; i<nCheckBoxes; i++) {
         QCheckBox *cbox = checkbox_list[i];
@@ -226,7 +341,7 @@ void MainWindow::createActions()
             connect((QObject *)cbox, SIGNAL(checkBoxClicked(QString)), this, SLOT(showMore(QString)));
         }
     }
-    LOG_MSG("createActions 5");
+//    LOG_MSG("createActions 5");
 
     // Graph menu
     connect(action_save_3D_snapshot, SIGNAL(triggered()), this, SLOT(saveSnapshot()));
@@ -235,23 +350,23 @@ void MainWindow::createActions()
 //    connect(actionStop_recording_VTK, SIGNAL(triggered()), this, SLOT(stopRecorderVTK()));
     connect(actionStart_recording_FACS, SIGNAL(triggered()), this, SLOT(startRecorderFACS()));
     connect(actionStop_recording_FACS, SIGNAL(triggered()), this, SLOT(stopRecorderFACS()));
-    LOG_MSG("createActions 6");
+//    LOG_MSG("createActions 6");
 
     connect(field->buttonGroup_cell_constituent, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(buttonClick_cell_constituent(QAbstractButton*)));
     connect(field->buttonGroup_field_constituent, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(buttonClick_field_constituent(QAbstractButton*)));
-    LOG_MSG("createActions 6a");
+//    LOG_MSG("createActions 6a");
 
     connect(buttonGroup_plane, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(buttonClick_plane(QAbstractButton*)));
 	connect(lineEdit_fraction, SIGNAL(textEdited(QString)), this, SLOT(textEdited_fraction(QString)));
     connect(actionSelect_cell_constituent, SIGNAL(triggered()), SLOT(onSelectCellConstituent()));
     connect(actionSelect_field_constituent, SIGNAL(triggered()), SLOT(onSelectFieldConstituent()));
-    LOG_MSG("createActions 6b");
+//    LOG_MSG("createActions 6b");
     connect(line_CELLPERCENT_1, SIGNAL(textEdited(QString)), this, SLOT(on_line_CELLPERCENT_1_textEdited(QString)));
     connect(line_CELLPERCENT_2, SIGNAL(textEdited(QString)), this, SLOT(on_line_CELLPERCENT_2_textEdited(QString)));
-    LOG_MSG("createActions 6c");
+//    LOG_MSG("createActions 6c");
 //    connect(buttonGroup_farfield, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(radioButtonChanged(QAbstractButton*)));
     connect(buttonGroup_hypoxia, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(radioButtonChanged(QAbstractButton*)));
-    LOG_MSG("createActions 7");
+//    LOG_MSG("createActions 7");
 }
 
 //--------------------------------------------------------------------------------------------------------
@@ -497,15 +612,15 @@ void MainWindow:: drawDistPlots()
 
 //--------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------
-void MainWindow:: initFACSPlot()
-{
-    qpFACS = (QwtPlot *)qFindChild<QObject *>(this, "qwtPlot_FACS");
-    qpFACS->clear();
-    qpFACS->setTitle("FACS");
-//    QwtSymbol symbol = QwtSymbol( QwtSymbol::Diamond, Qt::blue, Qt::NoPen, QSize( 3,3 ) );
-    qpFACS->replot();
-    connect((QObject *)groupBox_FACS,SIGNAL(groupBoxClicked(QString)),this,SLOT(processGroupBoxClick(QString)));
-}
+//void MainWindow:: initFACSPlot()
+//{
+//    qpFACS = (QwtPlot *)qFindChild<QObject *>(this, "qwtPlot_FACS");
+//    qpFACS->clear();
+//    qpFACS->setTitle("FACS");
+////    QwtSymbol symbol = QwtSymbol( QwtSymbol::Diamond, Qt::blue, Qt::NoPen, QSize( 3,3 ) );
+//    qpFACS->replot();
+//    connect((QObject *)groupBox_FACS,SIGNAL(groupBoxClicked(QString)),this,SLOT(processGroupBoxClick(QString)));
+//}
 
 //--------------------------------------------------------------------------------------------------------
 // Possible variables to plot are Global::vars_used[]
@@ -522,7 +637,7 @@ void MainWindow::showFACS()
 //    LOG_MSG("showFACS");
 //    if (Global::showingFACS) LOG_MSG("showingFACS");
 //    if (recordingFACS) LOG_MSG("recordingFACS");
-    qpFACS = (QwtPlot *)qFindChild<QObject *>(this, "qwtPlot_FACS");
+//    qpFACS = (QwtPlot *)qFindChild<QObject *>(this, "qwtPlot_FACS");
     qpFACS->size();
     qpFACS->clear();
     qpFACS->setTitle("FACS");
@@ -718,18 +833,18 @@ void MainWindow::test_histo()
 
 //--------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------
-void MainWindow:: initHistoPlot()
-{
-    qpHistoBar = (QwtPlot *)qFindChild<QObject *>(this, "qwtPlot_Histo");
-    qpHistoBar->setTitle("Histogram");
-//    QwtSymbol symbol = QwtSymbol( QwtSymbol::Diamond, Qt::blue, Qt::NoPen, QSize( 3,3 ) );
-    qpHistoBar->replot();
+//void MainWindow:: initHistoPlot()
+//{
+//    qpHistoBar = (QwtPlot *)qFindChild<QObject *>(this, "qwtPlot_Histo");
+//    qpHistoBar->setTitle("Histogram");
+////    QwtSymbol symbol = QwtSymbol( QwtSymbol::Diamond, Qt::blue, Qt::NoPen, QSize( 3,3 ) );
+//    qpHistoBar->replot();
 
-    qpHistoLine = (QwtPlot *)qFindChild<QObject *>(this, "qwtPlot_HistoLine");
-    qpHistoLine->hide();
+//    qpHistoLine = (QwtPlot *)qFindChild<QObject *>(this, "qwtPlot_HistoLine");
+//    qpHistoLine->hide();
 
-    connect((QObject *)groupBox_Histo,SIGNAL(groupBoxClicked(QString)),this,SLOT(processGroupBoxClick(QString)));
-}
+//    connect((QObject *)groupBox_Histo,SIGNAL(groupBoxClicked(QString)),this,SLOT(processGroupBoxClick(QString)));
+//}
 
 //--------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------
@@ -740,7 +855,8 @@ void MainWindow::makeHistoPlot(int numValues, double xmin, double width,
     double pos;
 
 //    LOG_MSG("makeHistoPlot");
-    bool use_HistoBar = radioButton_histotype_1->isChecked();
+//    bool use_HistoBar = radioButton_histotype_1->isChecked();
+    bool use_HistoBar = (buttonGroup_histotype->checkedId() == 1);
     if (use_HistoBar) {
         plot = qpHistoBar;
         qpHistoLine->hide();
@@ -3067,7 +3183,7 @@ void MainWindow::setupConstituents()
     field->setFieldConstituentButtons(groupBox_field_constituent, field->buttonGroup_field_constituent, &field->vbox_field_constituent, &field->field_constituent_rb_list, tag);
     LOG_MSG("did setCellCellConstituentButtons: field");
     tag = "histo";
-    field->setCellConstituentButtons(groupBox_Histo_y_vars, buttonGroup_histo, &vbox_histo, &histo_rb_list, tag);
+    field->setCellConstituentButtons(groupBox_Histo_x_vars, buttonGroup_histo, &vbox_histo, &histo_rb_list, tag);
     LOG_MSG("did setCellConstituentButtons: histo");
     tag = "FACS_x";
     field->setCellConstituentButtons(groupBox_FACS_x_vars, buttonGroup_FACS_x_vars, &vbox_FACS_x_vars, &FACS_x_vars_rb_list, tag);
@@ -3194,7 +3310,8 @@ void MainWindow::processGroupBoxClick(QString text)
 
     if (text.compare("Histo") == 0) {
         LOG_MSG("save Histo plot");
-        bool use_HistoBar = radioButton_histotype_1->isChecked();
+//        bool use_HistoBar = radioButton_histotype_1->isChecked();
+        bool use_HistoBar = (buttonGroup_histotype->checkedId() == 1);
         if (use_HistoBar) {
             plot = qpHistoBar;
             qpHistoLine->hide();
