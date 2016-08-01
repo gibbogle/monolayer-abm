@@ -143,8 +143,14 @@ GRAPH_SET tsGraphSet[] = {
     {"mediumdrugB",
     "Ave Medium Drug B",
     "Concentration",
-     "Average concentration of drug B in the medium (far-field)",
+    "Average concentration of drug B in the medium (far-field)",
     19, true, 0, 0.001, 0, TS_TYPE},
+
+    {"doublingtime",
+    "Ave Doubling time",
+    "Hours",
+    "Average doubling time",
+    20, true, 0, 0.01, 0, TS_TYPE},
 
 //    {"bdryoxygen",
 //    "Blob Boundary Oxygen",

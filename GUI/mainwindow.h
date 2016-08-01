@@ -85,7 +85,11 @@ protected:
     void closeEvent(QCloseEvent *event);
 
 private slots:
+    void pushButton_colony_clicked();
+    void on_checkBox_colony_toggled();
     void on_action_FACS_triggered();
+    void clickedGraph(QMouseEvent*);
+
     void on_checkBox_FACS_PLOT_toggled(bool checked);
     void newFile();
     void open();
@@ -276,7 +280,6 @@ private:
 
 	QwtPlot *distplot_list[5];
 	QwtPlotCurve *curve_list[5];
-
 	QList<QWidget *> widget_list;
 
     QGroupBox *groupBox_FACS;
@@ -294,6 +297,7 @@ private:
     QwtPlotCurve *curveFACS;
     QwtPlot *qpHistoBar, *qpHistoLine;
     HistogramItem *histogram;
+    QCustomPlot *colony_plot;
 
 	int nDistPts;
 	int nTicks;

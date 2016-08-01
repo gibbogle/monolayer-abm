@@ -17,9 +17,11 @@ integer, parameter :: LOGNORMAL_DIST   = 2
 integer, parameter :: EXPONENTIAL_DIST = 3
 integer, parameter :: CONSTANT_DIST    = 4
 
-integer, parameter :: DIVIDING  = 1
-integer, parameter :: QUIESCENT = 2
-integer, parameter :: DEAD      = 3
+!integer, parameter :: DIVIDING  = 1
+!integer, parameter :: QUIESCENT = 2
+!integer, parameter :: DEAD      = 3
+integer, parameter :: ALIVE = 0
+integer, parameter :: DEAD = 1
 
 integer, parameter :: OUTSIDE_TAG  = -1
 integer, parameter :: UNREACHABLE_TAG  = -2
@@ -49,6 +51,7 @@ integer, parameter :: CELL_VOLUME = MAX_CHEMO + 2
 integer, parameter :: O2_BY_VOL = MAX_CHEMO + 3
 
 integer, parameter :: N_EXTRA = O2_BY_VOL - MAX_CHEMO + 1	! = 4 = total # of variables - MAX_CHEMO
+integer, parameter :: NCONST = MAX_CHEMO
 
 integer, parameter :: TPZ_CLASS = 1
 integer, parameter :: DNB_CLASS = 2
@@ -56,11 +59,13 @@ integer, parameter :: DRUG_EVENT = 1
 integer, parameter :: RADIATION_EVENT = 2
 integer, parameter :: MEDIUM_EVENT = 3
 
+integer, parameter :: NTCP = 200
+
 integer, parameter :: DIST_NV = 20
 
 integer, parameter :: EXTRA = 1
 integer, parameter :: INTRA = 2
-integer, parameter :: MAX_CELLTYPES = 4
+integer, parameter :: MAX_CELLTYPES = 2
 integer, parameter :: MAX_DRUGTYPES = 2
 integer, parameter :: max_nlist = 200000
 integer, parameter :: NRF = 4
@@ -97,22 +102,29 @@ real(REAL_KIND), parameter :: small_d = 0.1e-4          ! 0.1 um -> cm
 type cell_type
 	integer :: ID
 	integer :: celltype
-!	integer :: site(3)
+	integer :: site(3)
 	integer :: ivin
 	logical :: active
 	integer :: state
+	logical :: Iphase
+!    integer :: nspheres             ! =1 for Iphase, =2 for Mphase
+!	real(REAL_KIND) :: radius(2)	! sphere radii (um) -> cm
+!	real(REAL_KIND) :: centre(3,2)  ! sphere centre positions
+!	real(REAL_KIND) :: d			! centre separation distance (um) -> cm
 	integer :: generation
-	real(REAL_KIND) :: conc(MAX_CHEMO)
+!	real(REAL_KIND) :: conc(MAX_CHEMO)
+	real(REAL_KIND) :: Cin(MAX_CHEMO)
 !	real(REAL_KIND) :: Cex(MAX_CHEMO)
 	real(REAL_KIND) :: dCdt(MAX_CHEMO)
 	real(REAL_KIND) :: dMdt(MAX_CHEMO)      ! mumol/s
 	real(REAL_KIND) :: CFSE
 	real(REAL_KIND) :: dVdt
-	real(REAL_KIND) :: volume			! fractional volume (fraction of nominal cell volume Vcell_cm3)
+	real(REAL_KIND) :: V			! actual volume cm3
 	real(REAL_KIND) :: divide_volume	! fractional divide volume (normalised)
 	real(REAL_KIND) :: divide_time
 	real(REAL_KIND) :: t_divide_last	! these two values are used for colony simulation
 	real(REAL_KIND) :: t_divide_next
+	real(REAL_KIND) :: birthtime
 	real(REAL_KIND) :: t_anoxia
 	real(REAL_KIND) :: t_anoxia_die
 	real(REAL_KIND) :: t_aglucosia
@@ -120,6 +132,8 @@ type cell_type
 	real(REAL_KIND) :: M
 	real(REAL_KIND) :: p_rad_death
 	real(REAL_KIND) :: p_drug_death(MAX_DRUGTYPES)
+	real(REAL_KIND) :: t_start_mitosis
+	real(REAL_KIND) :: mitosis
 	logical :: growth_delay
 	real(REAL_KIND) :: dt_delay
 	real(REAL_KIND) :: t_growth_delay_end			! this is for suppression of growth before first division
@@ -127,9 +141,31 @@ type cell_type
 	logical :: radiation_tag, anoxia_tag, aglucosia_tag
 	logical :: drug_tag(MAX_DRUGTYPES)
 	logical :: G2_M
-	logical :: exists
+!	logical :: exists
 !	integer :: cnr(3,8)
 !	real(REAL_KIND) :: wt(8)
+
+	! Cell cycle 
+    integer :: phase
+    logical :: G1_flag, G1S_flag, G2_flag, G2M_flag
+    real(REAL_KIND) :: G1_time, S_time, G2_time
+    real(REAL_KIND) :: G1_V, S_V, G2_V
+    real(REAL_KIND) :: G1S_time, G2M_time, M_time
+    real(REAL_KIND) :: doubling_time
+    integer :: NL1, NL2(2)
+    logical :: starved
+	
+	integer :: ndt
+
+end type
+
+type cycle_parameters_type
+    real(REAL_KIND) :: T_G1(MAX_CELLTYPES), T_S(MAX_CELLTYPES), T_G2(MAX_CELLTYPES), T_M(MAX_CELLTYPES)
+    real(REAL_KIND) :: G1_mean_delay(MAX_CELLTYPES), G2_mean_delay(MAX_CELLTYPES)
+    real(REAL_KIND) :: Pk_G1(MAX_CELLTYPES), Pk_G2(MAX_CELLTYPES)
+    real(REAL_KIND) :: eta_PL, eta_L(2), Kcp
+    real(REAL_KIND) :: Krepair_base, Krepair_max, Kmisrepair(2)
+    real(REAL_KIND) :: Tcp(0:NTCP)
 end type
 
 type drug_type
@@ -236,6 +272,7 @@ type(cell_type), allocatable, target :: cell_list(:)
 type(treatment_type), allocatable :: protocol(:)
 type(event_type), allocatable :: event(:)
 !real(REAL_KIND), allocatable, target :: Cslice(:,:,:,:)
+type(cell_type), target, allocatable :: ccell_list(:)
 
 character*(12) :: dll_version, dll_run_version
 character*(12) :: gui_version, gui_run_version
@@ -261,7 +298,7 @@ integer :: initial_count
 
 !integer :: jumpvec(3,27)
 
-integer :: nlist, Ncells, Ncells0, lastNcells, lastID, Ncelltypes, Ncells_type(MAX_CELLTYPES)
+integer :: nlist, Ncells, Ncells0, ncells_mphase, lastNcells, lastID, Ncelltypes, Ncells_type(MAX_CELLTYPES)
 !integer :: diam_count_limit
 logical :: limit_stop
 !integer :: nadd_sites, Nsites, Nreuse
@@ -273,6 +310,11 @@ integer :: Ndrug_dead(MAX_DRUGTYPES,MAX_CELLTYPES)
 logical :: use_radiation_growth_delay_all = .true.
 !logical :: radiation_dosed
 
+integer :: ndoublings
+real(REAL_KIND) :: doubling_time_sum
+
+type(cycle_parameters_type), target :: cc_parameters    ! possibly varies by cell type
+
 logical :: drug_gt_cthreshold(MAX_DRUGTYPES)
 real(REAL_KIND), parameter :: Cthreshold = 1.0e-5
 
@@ -281,16 +323,16 @@ real(REAL_KIND), parameter :: Cthreshold = 1.0e-5
 integer :: istep, nsteps, it_solve, NT_CONC, NT_GUI_OUT, show_progeny, ichemo_curr
 integer :: Mnodes, ncpu_input
 integer :: Nevents
-real(REAL_KIND) :: DELTA_T, DELTA_X, fluid_fraction, Vsite_cm3, Vextra_cm3, Vcell_pL
+real(REAL_KIND) :: DELTA_T, DELTA_X, fluid_fraction, Vsite_cm3, Vextra_cm3, Vcell_pL, tnow
 !real(REAL_KIND) :: dxb, dxb3, dxf, dx3
 !real(REAL_KIND) :: grid_offset(3)
 real(REAL_KIND) :: Vcell_cm3, medium_volume0, total_volume, well_area, t_lastmediumchange
 real(REAL_KIND) :: celltype_fraction(MAX_CELLTYPES)
 logical :: celltype_display(MAX_CELLTYPES)
 real(REAL_KIND) :: MM_THRESHOLD, anoxia_threshold, t_anoxia_limit, anoxia_death_delay, Vdivide0, dVdivide
-real(REAL_KIND) :: aglucosia_threshold, t_aglucosia_limit, aglucosia_death_delay
+real(REAL_KIND) :: aglucosia_threshold, t_aglucosia_limit, aglucosia_death_delay, max_growthrate(MAX_CELLTYPES)
 real(REAL_KIND) :: divide_time_median(MAX_CELLTYPES), divide_time_shape(MAX_CELLTYPES), divide_time_mean(MAX_CELLTYPES)
-real(REAL_KIND) :: t_simulation, execute_t1
+real(REAL_KIND) :: t_simulation, execute_t1, mitosis_duration
 real(REAL_KIND) :: O2cutoff(3), hypoxia_threshold
 real(REAL_KIND) :: growthcutoff(3)
 real(REAL_KIND) :: spcrad_value
@@ -320,15 +362,19 @@ logical :: stopped, clear_to_send
 logical :: simulation_start, par_zig_init, initialized
 logical :: use_radiation, use_treatment
 !logical :: use_growth_suppression = .true.	! see usage in subroutine CellGrowth
-logical :: use_extracellular_O2
+logical :: use_extracellular_O2 = .false.
 logical :: use_V_dependence
 logical :: use_divide_time_distribution = .true.
 logical :: use_constant_divide_volume = .true.
+logical :: use_volume_method
+logical :: use_cell_cycle
+logical :: use_constant_growthrate = .true. 
 logical :: randomise_initial_volume
 !logical :: use_FD = .true.
 logical :: use_gaplist = .true.
 !logical :: relax
 logical :: use_parallel
+logical :: colony_simulation
 logical :: dbug = .false.
 logical :: bdry_debug
 
@@ -342,6 +388,7 @@ integer :: idbug = 0
 integer :: Nbnd
 integer :: seed(2)
 integer :: kcell_dbug
+integer :: kcell_now
 !integer :: icentral !extracellular variable index corresponding to a central site (NX/2,NY/2,NZ/2)
 
 ! Off-lattice parameters, in the input file but unused here
@@ -438,6 +485,23 @@ write(logmsg,*) 'ERROR: random_choice: ',N,p
 call logger(logmsg)
 stop
 end function
+
+!-----------------------------------------------------------------------------------------
+! Returns a unit vector with random 3D direction
+!-----------------------------------------------------------------------------------------
+subroutine get_random_vector3(v)
+real(REAL_KIND) :: v(3)
+real(REAL_KIND) :: R1, R2, s, a
+integer :: kpar=0
+
+R1 = par_uni(kpar)
+R2 = par_uni(kpar)
+s = sqrt(R2*(1-R2))
+a = 2*PI*R1
+v(1) = 2*cos(a)*s
+v(2) = 2*sin(a)*s
+v(3) = 1 - 2*R2
+end subroutine
 
 !--------------------------------------------------------------------------------
 ! Returns a permutation of the elements of a()
@@ -633,7 +697,6 @@ end function
 ! 2. Use the divide time log-normal distribution
 !    (a) use_V_dependence = true
 !    (b) use_V_dependence = false
-! NOTE: %volume and %divide_volume are normalised.
 !-----------------------------------------------------------------------------------------
 function get_divide_volume(ityp,V0,Tdiv) result(Vdiv)
 integer :: ityp

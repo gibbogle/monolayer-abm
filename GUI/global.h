@@ -131,6 +131,11 @@ namespace Global
     extern bool showingField;
     extern bool recordingField;
 
+    extern bool simulate_colony;
+    extern double dist[40];
+    extern double ddist;
+    extern int ndist;
+
 
 } // namespace Global
 

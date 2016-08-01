@@ -2,9 +2,8 @@
 
 module cellstate
 use global
-!use boundary
 use chemokine
-!use ode_diffuse
+use cycle_mod
 implicit none
 
 integer :: kcell_dividing = 0
@@ -18,18 +17,18 @@ contains
 subroutine GrowCells(dose,dt,ok)
 real(REAL_KIND) :: dose, dt
 logical :: ok
+logical :: changed
 integer :: kcell, idrug, ichemo
 
-!call logger('GrowCells')
+!call logger('GrowCells: ')
+tnow = istep*DELTA_T
 ok = .true.
-!if (use_radiation .and. dose > 0) then
+call grower(dt,changed,ok)
+if (.not.ok) return
 if (dose > 0) then
 	call Irradiation(dose, ok)
 	if (.not.ok) return
 endif
-call CellGrowth(dt,ok)
-if (.not.ok) return
-
 if (use_death) then
 	call CellDeath(dt,ok)
 	if (.not.ok) return
@@ -40,27 +39,14 @@ end subroutine
 ! The O2 concentration to use with cell kcell is either the intracellular concentration,
 ! or if use_extracellular_O2, the corresponding extracellular concentration
 !-----------------------------------------------------------------------------------------
-subroutine getO2conc(kcell, C_O2)
-integer :: kcell
-real(REAL_KIND) :: C_O2
-integer :: iv, site(3)
-real(REAL_KIND) :: tnow
+subroutine getO2conc(cp, C_O2)
+type(cell_type), pointer :: cp
+real(REAL_KIND) :: Cex, C_O2
 
 if (use_extracellular_O2 .and. istep > 1) then		! fix 30/04/2015
-!	iv = cell_list(kcell)%ivin
-!	if (iv < 1) then
-!		C_O2 = cell_list(kcell)%conc(OXYGEN)		! use this until %ivin is set in SetupODEDiff
-!!		write(logmsg,*) 'getO2conc: ',istep,kcell,site,iv
-!!		call logger(logmsg)
-!!		stop
-!!		tnow = istep*DELTA_T
-!!		C_O2 = BdryConc(OXYGEN,tnow)	! assume that this is a site at the boundary
-!	else
-!		C_O2 = allstate(iv-1,OXYGEN)
-!	endif
     C_O2 = chemo(OXYGEN)%conc
 else
-	C_O2 = cell_list(kcell)%conc(OXYGEN)
+    C_O2 = cp%Cin(OXYGEN)
 endif
 end subroutine
 
@@ -68,84 +54,113 @@ end subroutine
 ! The glucose concentration to use with cell kcell is either the intracellular concentration,
 ! or if use_extracellular_O2 (!), the corresponding extracellular concentration
 !-----------------------------------------------------------------------------------------
-subroutine getGlucoseconc(kcell, C_glucose)
-integer :: kcell
+subroutine getGlucoseconc(cp, C_glucose)
+type(cell_type), pointer :: cp
 real(REAL_KIND) :: C_glucose
-integer :: iv, site(3)
-real(REAL_KIND) :: tnow
 
-if (use_extracellular_O2 .and. istep > 1) then		! fix 30/04/2015
-!	iv = cell_list(kcell)%ivin
-!	if (iv < 1) then
-!		C_glucose = cell_list(kcell)%conc(GLUCOSE)		! use this until %ivin is set in SetupODEDiff
-!	else
-!		C_glucose = allstate(iv-1,GLUCOSE)
-!	endif
-    C_glucose = chemo(GLUCOSE)%conc
-else
-	C_glucose = cell_list(kcell)%conc(GLUCOSE)
-endif
+C_glucose = cp%Cin(GLUCOSE)
 end subroutine
 
 !-----------------------------------------------------------------------------------------
-! Irradiate cells with dose.
+! Irradiate cells with dose (and duration tmin to be added)
 !-----------------------------------------------------------------------------------------
 subroutine Irradiation(dose,ok)
 real(REAL_KIND) :: dose
 logical :: ok
 integer :: kcell, site(3), iv, ityp, idrug, im, ichemo, kpar=0
-real(REAL_KIND) :: C_O2, SER, p_death, p_recovery, R, kill_prob, tnow
+real(REAL_KIND) :: C_O2, SER, p_death, p_recovery, R, kill_prob, tmin
 real(REAL_KIND) :: Cs							! concentration of radiosensitising drug
 real(REAL_KIND) :: SER_max0, SER_Km, SER_KO2	! SER parameters of the drug
 real(REAL_KIND) :: SERmax						! max sensitisation at the drug concentration
+type(cell_type), pointer :: cp
+type(cycle_parameters_type), pointer :: ccp
 
 ok = .true.
 call logger('Irradiation')
-tnow = istep*DELTA_T	! seconds
-do kcell = 1,nlist
-	if (cell_list(kcell)%state == DEAD) cycle
-	if (cell_list(kcell)%radiation_tag) cycle	! we do not tag twice (yet)
-	ityp = cell_list(kcell)%celltype
-	call getO2conc(kcell,C_O2)
-	! Compute sensitisation SER
-	SER = 1.0
-	do idrug = 1,Ndrugs_used
-		ichemo = 4 + 3*(idrug-1)
-		if (.not.chemo(ichemo)%present) cycle
-		do im = 0,2
-			ichemo = 4 + 3*(idrug-1) + im
-			if (drug(idrug)%sensitises(ityp,im)) then
-				Cs = cell_list(kcell)%conc(ichemo)	! concentration of drug/metabolite in the cell
-				SER_max0 = drug(idrug)%SER_max(ityp,im)
-				SER_Km = drug(idrug)%SER_Km(ityp,im)
-				SER_KO2 = drug(idrug)%SER_KO2(ityp,im)
-				SERmax = (Cs*SER_max0 + SER_Km)/(Cs + SER_Km)
-				SER = SER*(C_O2 + SER_KO2*SERmax)/(C_O2 + SER_KO2)
-			endif
-		enddo
-	enddo
-	call get_kill_probs(ityp,dose,C_O2,SER,p_recovery,p_death)
-	kill_prob = 1 - p_recovery
-	R = par_uni(kpar)
-	if (R < kill_prob) then
-		cell_list(kcell)%radiation_tag = .true.
-		Nradiation_tag(ityp) = Nradiation_tag(ityp) + 1
-		cell_list(kcell)%p_rad_death = p_death
-		if (LQ(ityp)%growth_delay_N > 0) then
-			cell_list(kcell)%growth_delay = .true.
-			cell_list(kcell)%dt_delay = LQ(ityp)%growth_delay_factor*dose
-			cell_list(kcell)%N_delayed_cycles_left = LQ(ityp)%growth_delay_N
-		else
-			cell_list(kcell)%growth_delay = .false.
-		endif
-	elseif (use_radiation_growth_delay_all .and. LQ(ityp)%growth_delay_N > 0) then
-		cell_list(kcell)%growth_delay = .true.
-		cell_list(kcell)%dt_delay = LQ(ityp)%growth_delay_factor*dose
-		cell_list(kcell)%N_delayed_cycles_left = LQ(ityp)%growth_delay_N
-	else
-		cell_list(kcell)%growth_delay = .false.
-	endif
-enddo
+!tnow = istep*DELTA_T	! seconds
+if (use_volume_method) then
+    do kcell = 1,nlist
+        if (colony_simulation) then
+            cp => ccell_list(kcell)
+        else
+            cp => cell_list(kcell)
+        endif
+	    if (cp%state == DEAD) cycle
+	    if (cp%radiation_tag) cycle	! we do not tag twice (yet)
+	    ityp = cp%celltype
+	    call getO2conc(cp,C_O2)
+	    ! Compute sensitisation SER
+	    SER = 1.0
+	    do idrug = 1,Ndrugs_used
+		    ichemo = 4 + 3*(idrug-1)
+		    if (.not.chemo(ichemo)%present) cycle
+		    do im = 0,2
+			    ichemo = 4 + 3*(idrug-1) + im
+			    if (drug(idrug)%sensitises(ityp,im)) then
+				    Cs = cp%Cin(ichemo)	! concentration of drug/metabolite in the cell
+				    SER_max0 = drug(idrug)%SER_max(ityp,im)
+				    SER_Km = drug(idrug)%SER_Km(ityp,im)
+				    SER_KO2 = drug(idrug)%SER_KO2(ityp,im)
+				    SERmax = (Cs*SER_max0 + SER_Km)/(Cs + SER_Km)
+				    SER = SER*(C_O2 + SER_KO2*SERmax)/(C_O2 + SER_KO2)
+			    endif
+		    enddo
+	    enddo
+	    call get_kill_probs(ityp,dose,C_O2,SER,p_recovery,p_death)
+	    kill_prob = 1 - p_recovery
+	    R = par_uni(kpar)
+	    if (R < kill_prob) then
+		    cp%radiation_tag = .true.
+		    Nradiation_tag(ityp) = Nradiation_tag(ityp) + 1
+		    cp%p_rad_death = p_death
+		    if (LQ(ityp)%growth_delay_N > 0 .and. cp%Iphase) then
+			    cp%growth_delay = .true.
+			    cp%dt_delay = LQ(ityp)%growth_delay_factor*dose
+			    cp%N_delayed_cycles_left = LQ(ityp)%growth_delay_N
+		    else
+			    cp%growth_delay = .false.
+		    endif
+	    elseif (use_radiation_growth_delay_all .and. LQ(ityp)%growth_delay_N > 0) then
+		    cp%growth_delay = .true.
+		    cp%dt_delay = LQ(ityp)%growth_delay_factor*dose
+		    cp%N_delayed_cycles_left = LQ(ityp)%growth_delay_N
+	    else
+		    cp%growth_delay = .false.
+	    endif
+    enddo
+else
+    ccp => cc_parameters
+    tmin = 1.0      ! for now...
+    do kcell = 1,nlist
+        if (colony_simulation) then
+            cp => ccell_list(kcell)
+        else
+            cp => cell_list(kcell)
+        endif
+	    if (cp%state == DEAD) cycle
+	    ityp = cp%celltype
+	    call getO2conc(cp,C_O2)
+	    ! Compute sensitisation SER
+	    SER = 1.0
+	    do idrug = 1,Ndrugs_used
+		    ichemo = 4 + 3*(idrug-1)
+		    if (.not.chemo(ichemo)%present) cycle
+		    do im = 0,2
+			    ichemo = 4 + 3*(idrug-1) + im
+			    if (drug(idrug)%sensitises(ityp,im)) then
+				    Cs = cp%Cin(ichemo)	! concentration of drug/metabolite in the cell
+				    SER_max0 = drug(idrug)%SER_max(ityp,im)
+				    SER_Km = drug(idrug)%SER_Km(ityp,im)
+				    SER_KO2 = drug(idrug)%SER_KO2(ityp,im)
+				    SERmax = (Cs*SER_max0 + SER_Km)/(Cs + SER_Km)
+				    SER = SER*(C_O2 + SER_KO2*SERmax)/(C_O2 + SER_KO2)
+			    endif
+		    enddo
+	    enddo
+        call radiation_damage(cp, ccp, dose, SER, tmin)
+    enddo
+endif
+call logger('did Irradiation')
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -166,7 +181,6 @@ real(REAL_KIND) :: OER_alpha_d, OER_beta_d, expon, kill_prob_orig
 
 OER_alpha_d = dose*(LQ(ityp)%OER_am*C_O2 + LQ(ityp)%K_ms)/(C_O2 + LQ(ityp)%K_ms)
 OER_beta_d = dose*(LQ(ityp)%OER_bm*C_O2 + LQ(ityp)%K_ms)/(C_O2 + LQ(ityp)%K_ms)
-!expon_err = LQ(ityp)%alpha_H*OER_alpha_d + LQ(ityp)%beta_H*OER_alpha_d**2	! 07/08/2015
 
 OER_alpha_d = OER_alpha_d*SER
 OER_beta_d = OER_beta_d*SER
@@ -174,14 +188,6 @@ OER_beta_d = OER_beta_d*SER
 expon = LQ(ityp)%alpha_H*OER_alpha_d + LQ(ityp)%beta_H*OER_beta_d**2
 p_recovery = exp(-expon)	! = SF
 p_death = LQ(ityp)%death_prob
-
-!kill_prob_orig = 1 - exp(-expon)
-!call get_pdeath(ityp,dose,C_O2,p_death)
-!p_recovery = 1 - kill_prob_orig/p_death
-!p_recovery = 1 - kill_prob_orig
-!write(nflog,'(a,4e12.3)') 'get_kill_probs: OER_alpha_d,OER_beta_d,expon,expon_err: ',OER_alpha_d,OER_beta_d,expon,expon_err
-!write(nflog,'(a,2e12.3)') 'kill_prob, kill_prob_err: ',kill_prob_orig,1 - exp(-expon_err)
-!write(nflog,'(a,e12.3)') 'p_recovery: ',p_recovery
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -197,134 +203,76 @@ real(REAL_KIND) :: dose, C_O2, p_death
 p_death = LQ(ityp)%death_prob
 end subroutine
 
-!-----------------------------------------------------------------------------------------
-! Cells move to preferable nearby sites.
-! For now this is turned off - need to formulate a sensible interpretation of "preferable"
-!-----------------------------------------------------------------------------------------
-!subroutine CellMigration(ok)
-!logical :: ok
-!integer :: kcell, j, indx, site0(3), site(3), jmax
-!real(REAL_KIND) :: C0(MAX_CHEMO), C(MAX_CHEMO), v0, v, vmax, d0, d
-!
-!call logger('CellMigration is not yet implemented')
-!ok = .false.
-!return
-!
-!ok = .true.
-!do kcell = 1,nlist
-!	if (cell_list(kcell)%state == DEAD) cycle
-!	site0 = cell_list(kcell)%site
-!	C0 = occupancy(site0(1),site0(2),site0(3))%C(:)
-!	v0 = SiteValue(C0)
-!	d0 = cdistance(site0)
-!	jmax = 0
-!	vmax = -1.0e10
-!	do j = 1,27
-!		if (j == 14) cycle
-!		site = site0 + jumpvec(:,j)
-!		indx = occupancy(site(1),site(2),site(3))%indx(1)
-!!		if (indx < -100) then	! necrotic site
-!		if (indx == 0) then	!	vacant site
-!			C = occupancy(site(1),site(2),site(3))%C(:)
-!			v = SiteValue(C)
-!			d = cdistance(site)
-!			if (d > d0 .and. v > v0) then
-!				vmax = v
-!				jmax = j
-!			endif
-!		endif
-!	enddo
-!	if (jmax > 0) then
-!		site = site0 + jumpvec(:,jmax)
-!		indx = occupancy(site(1),site(2),site(3))%indx(1)
-!		cell_list(kcell)%site = site
-!		occupancy(site(1),site(2),site(3))%indx(1) = kcell
-!		occupancy(site0(1),site0(2),site0(3))%indx(1) = indx
-!	endif
-!enddo
-!end subroutine
-
-!-----------------------------------------------------------------------------------------
-! A measure of the attractiveness of a site with concentrations C(:)
-!-----------------------------------------------------------------------------------------
-!real(REAL_KIND) function SiteValue(C)
-!real(REAL_KIND) :: C(:)
-!
-!SiteValue = C(OXYGEN)
-!end function
 
 !-----------------------------------------------------------------------------------------
 ! Cells can be tagged to die, or finally die of anoxia or aglucosia, or they can be tagged 
 ! for death at division time if the drug is effective.
+! Note: if simulating colony, no tagging, no death from anoxia, aglucosia
 !-----------------------------------------------------------------------------------------
 subroutine CellDeath(dt,ok)
 real(REAL_KIND) :: dt
 logical :: ok
 integer :: kcell, nlist0, site(3), i, ichemo, idrug, im, ityp, killmodel, kpar=0 
-real(REAL_KIND) :: C_O2, C_glucose, Cdrug, n_O2, kmet, Kd, dMdt, kill_prob, dkill_prob, death_prob, tnow
+real(REAL_KIND) :: C_O2, C_glucose, Cdrug, n_O2, kmet, Kd, dMdt, kill_prob, dkill_prob, death_prob
 logical :: anoxia_death, aglucosia_death
 type(drug_type), pointer :: dp
+type(cell_type), pointer :: cp
 
 !call logger('CellDeath')
 ok = .true.
-tnow = istep*DELTA_T	! seconds
+if (colony_simulation) then
+    return
+endif
+
+!tnow = istep*DELTA_T	! seconds
 anoxia_death = chemo(OXYGEN)%controls_death
 aglucosia_death = chemo(GLUCOSE)%controls_death
 nlist0 = nlist
-!write(logmsg,*) 'Nanoxia_tag: ',Nanoxia_tag(1),'  Nanoxia_dead: ',Nanoxia_dead(1)
-!call logger(logmsg)
 do kcell = 1,nlist
-	if (cell_list(kcell)%state == DEAD) cycle
-	ityp = cell_list(kcell)%celltype
-	call getO2conc(kcell,C_O2)
-	if (cell_list(kcell)%anoxia_tag) then
-!		write(logmsg,*) 'anoxia_tag: ',kcell,cell_list(kcell)%state,tnow,cell_list(kcell)%t_anoxia_die
-!		call logger(logmsg)
-		if (tnow >= cell_list(kcell)%t_anoxia_die) then
-			call CellDies(kcell)
+    cp => cell_list(kcell)
+	if (cp%state == DEAD) cycle
+	ityp = cp%celltype
+	call getO2conc(cp,C_O2)
+	if (cp%anoxia_tag) then
+		if (tnow >= cp%t_anoxia_die) then
+			call CellDies(cp)
 			Nanoxia_dead(ityp) = Nanoxia_dead(ityp) + 1
-!			write(logmsg,*) 'cell dies: ndead: ',Nanoxia_dead(ityp)
-!			call logger(logmsg)
 			cycle
 		endif
 	else
 		if (anoxia_death .and. C_O2 < anoxia_threshold) then
-			cell_list(kcell)%t_anoxia = cell_list(kcell)%t_anoxia + dt
-			if (cell_list(kcell)%t_anoxia > t_anoxia_limit) then
-				cell_list(kcell)%t_anoxia_die = tnow + anoxia_death_delay	! time that the cell will die
-				if (.not.cell_list(kcell)%anoxia_tag) then	! don't retag
+			cp%t_anoxia = cp%t_anoxia + dt
+			if (cp%t_anoxia > t_anoxia_limit) then
+				cp%t_anoxia_die = tnow + anoxia_death_delay	! time that the cell will die
+				if (.not.cp%anoxia_tag) then	! don't retag
 					Nanoxia_tag(ityp) = Nanoxia_tag(ityp) + 1
 				endif
-				cell_list(kcell)%anoxia_tag = .true.						! tagged to die later
+				cp%anoxia_tag = .true.						! tagged to die later
 			endif
 		else
-			cell_list(kcell)%t_anoxia = 0
+			cp%t_anoxia = 0
 		endif
 	endif
 	
-	call getGlucoseconc(kcell,C_glucose)
-	if (cell_list(kcell)%aglucosia_tag) then
-!		write(logmsg,*) 'aglucosia_tag: ',kcell,cell_list(kcell)%state,tnow,cell_list(kcell)%t_aglucosia_die
-!		call logger(logmsg)
-		if (tnow >= cell_list(kcell)%t_aglucosia_die) then
-			call CellDies(kcell)
+	call getGlucoseconc(cp,C_glucose)
+	if (cp%aglucosia_tag) then
+		if (tnow >= cp%t_aglucosia_die) then
+			call CellDies(cp)
 			Naglucosia_dead(ityp) = Naglucosia_dead(ityp) + 1
-!			write(logmsg,*) 'cell dies: ndead: ',Naglucosia_dead(ityp)
-!			call logger(logmsg)
 			cycle
 		endif
 	else
 		if (aglucosia_death .and. C_glucose < aglucosia_threshold) then
-			cell_list(kcell)%t_aglucosia = cell_list(kcell)%t_aglucosia + dt
-			if (cell_list(kcell)%t_aglucosia > t_aglucosia_limit) then
-				cell_list(kcell)%t_aglucosia_die = tnow + aglucosia_death_delay	! time that the cell will die
-				if (.not.cell_list(kcell)%aglucosia_tag) then	! don't retag
+			cp%t_aglucosia = cp%t_aglucosia + dt
+			if (cp%t_aglucosia > t_aglucosia_limit) then
+				cp%t_aglucosia_die = tnow + aglucosia_death_delay	! time that the cell will die
+				if (.not.cp%aglucosia_tag) then	! don't retag
 					Naglucosia_tag(ityp) = Naglucosia_tag(ityp) + 1
 				endif
-				cell_list(kcell)%aglucosia_tag = .true.						! tagged to die later
+				cp%aglucosia_tag = .true.						! tagged to die later
 			endif
 		else
-			cell_list(kcell)%t_aglucosia = 0
+			cp%t_aglucosia = 0
 		endif
 	endif
 	
@@ -336,7 +284,7 @@ do kcell = 1,nlist
 		do im = 0,2
 			if (.not.dp%kills(ityp,im)) cycle
 			killmodel = dp%kill_model(ityp,im)		! could use %drugclass to separate kill modes
-			Cdrug = cell_list(kcell)%conc(ichemo + im)
+			Cdrug = cp%Cin(ichemo + im)
 			Kd = dp%Kd(ityp,im)
 			n_O2 = dp%n_O2(ityp,im)
 			kmet = (1 - dp%C2(ityp,im) + dp%C2(ityp,im)*dp%KO2(ityp,im)**n_O2/(dp%KO2(ityp,im)**n_O2 + C_O2**n_O2))*dp%Kmet0(ityp,im)
@@ -345,9 +293,9 @@ do kcell = 1,nlist
 			kill_prob = kill_prob + dkill_prob
 			death_prob = max(death_prob,dp%death_prob(ityp,im))
 		enddo
-	    if (.not.cell_list(kcell)%drug_tag(idrug) .and. par_uni(kpar) < kill_prob) then		! don't tag more than once
-			cell_list(kcell)%p_drug_death(idrug) = death_prob
-			cell_list(kcell)%drug_tag(idrug) = .true.
+	    if (.not.cp%drug_tag(idrug) .and. par_uni(kpar) < kill_prob) then		! don't tag more than once
+			cp%p_drug_death(idrug) = death_prob
+			cp%drug_tag(idrug) = .true.
             Ndrug_tag(idrug,ityp) = Ndrug_tag(idrug,ityp) + 1
 		endif
 	enddo
@@ -361,25 +309,6 @@ integer :: kill_model
 real(REAL_KIND) :: Kd, dMdt, Cdrug, dt, dkill_prob
 real(REAL_KIND) :: SF, SF1, dtstep, kill_prob, c
 integer :: Nsteps, istep
-
-!Nsteps = dt + 0.5
-!dtstep = 1.0
-!SF1 = 1.0
-!do istep = 1,Nsteps
-!	if (kill_model == 1) then
-!		kill_prob = Kd*dMdt*dtstep
-!	elseif (kill_model == 2) then
-!		kill_prob = Kd*dMdt*Cdrug*dtstep
-!	elseif (kill_model == 3) then
-!		kill_prob = Kd*dMdt**2*dtstep
-!	elseif (kill_model == 4) then
-!		kill_prob = Kd*Cdrug*dtstep
-!	elseif (kill_model == 5) then
-!		kill_prob = Kd*(Cdrug**2)*dtstep
-!	endif
-!    kill_prob = min(kill_prob,1.0)
-!    SF1 = SF1*(1 - kill_prob)
-!enddo
 
 if (kill_model == 1) then
 	c = Kd*dMdt
@@ -401,10 +330,12 @@ end subroutine
 !-----------------------------------------------------------------------------------------
 subroutine test_CellDies
 integer :: kcell, i, kpar=0
+type(cell_type), pointer :: cp
 
 do i = 1,10
 	kcell = random_int(1,nlist,kpar)
-	call CellDies(kcell)
+	cp => cell_list(kcell)
+	call CellDies(cp)
 enddo
 stop
 end subroutine
@@ -416,46 +347,30 @@ end subroutine
 ! If the site is on the boundary, it is removed from the boundary list, and %indx -> OUTSIDE_TAG
 ! The cell contents are released into the site.
 !-----------------------------------------------------------------------------------------
-subroutine CellDies(kcell)
+subroutine CellDies(cp)
 integer :: kcell
 integer :: site(3), ityp, idrug
-real(REAL_KIND) :: V
+type(cell_type), pointer :: cp
 
-cell_list(kcell)%state = DEAD
-cell_list(kcell)%exists = .false.
-ityp = cell_list(kcell)%celltype
+cp%state = DEAD
+ityp = cp%celltype
 Ncells = Ncells - 1
 Ncells_type(ityp) = Ncells_type(ityp) - 1
-if (cell_list(kcell)%anoxia_tag) then
+if (cp%anoxia_tag) then
 	Nanoxia_tag(ityp) = Nanoxia_tag(ityp) - 1
 endif
-if (cell_list(kcell)%aglucosia_tag) then
+if (cp%aglucosia_tag) then
 	Naglucosia_tag(ityp) = Naglucosia_tag(ityp) - 1
 endif
 do idrug = 1,ndrugs_used
-	if (cell_list(kcell)%drug_tag(idrug)) then
+	if (cp%drug_tag(idrug)) then
 		Ndrug_tag(idrug,ityp) = Ndrug_tag(idrug,ityp) - 1
 	endif
 enddo
-if (cell_list(kcell)%radiation_tag) then
+if (cp%radiation_tag) then
 	Nradiation_tag(ityp) = Nradiation_tag(ityp) - 1
 endif
 
-!site = cell_list(kcell)%site
-!occupancy(site(1),site(2),site(3))%indx(1) = 0
-!if (associated(occupancy(site(1),site(2),site(3))%bdry)) then
-!	call bdrylist_delete(site,bdrylist)
-!    nullify(occupancy(site(1),site(2),site(3))%bdry)
-!	occupancy(site(1),site(2),site(3))%indx(1) = OUTSIDE_TAG
-!	Nsites = Nsites - 1
-!	bdry_changed = .true.
-!	call OutsideNeighbours(site)
-!	call AddToMedium(kcell,site)
-!else
-!	V = cell_list(kcell)%volume*Vcell_cm3
-!	occupancy(site(1),site(2),site(3))%C = ((Vsite_cm3 - V)*occupancy(site(1),site(2),site(3))%C + V*cell_list(kcell)%conc)/Vsite_cm3
-!endif
-!call NecroticMigration(site)
 ngaps = ngaps + 1
 if (ngaps > max_ngaps) then
     write(logmsg,'(a,i6,i6)') 'CellDies: ngaps > max_ngaps: ',ngaps,max_ngaps
@@ -467,16 +382,16 @@ end subroutine
 
 !-----------------------------------------------------------------------------------------
 !-----------------------------------------------------------------------------------------
-subroutine AddToMedium(kcell,site)
+subroutine AddToMedium(cp,site)
 integer :: kcell, site(3)
 integer :: ichemo
 real(REAL_KIND) :: V, Cex(MAX_CHEMO), Cin(MAX_CHEMO)
-
+type(cell_type),pointer :: cp
 return
 
 !Cex = occupancy(site(1),site(2),site(3))%C
-Cin = cell_list(kcell)%conc
-V = cell_list(kcell)%volume*Vcell_cm3
+Cin = cp%Cin
+V = cp%V
 do ichemo = 1,MAX_CHEMO
 	if (.not.chemo(ichemo)%used) cycle
 	chemo(ichemo)%medium_M = chemo(ichemo)%medium_M + V*Cin(ichemo) + (Vsite_cm3 - V)*Cex(ichemo)
@@ -495,98 +410,17 @@ do ichemo = 1,MAX_CHEMO
 enddo
 end subroutine
 
-!-----------------------------------------------------------------------------------------
-! When a bdry cell dies, need to check the neighbours to see if a site is now made outside.
-! To be made outside a site must have %indx(1) = 0 and at least one Neumann neighbour outside.
-!-----------------------------------------------------------------------------------------
-!subroutine OutsideNeighbours(site0)
-!integer :: site0(3)
-!integer :: k, j, x, y, z, xx, yy, zz
-!logical :: isout, done
-!
-!done = .false.
-!do while(.not.done)
-!	done = .true.
-!	do k = 1,27
-!		if (k == 14) cycle
-!		x = site0(1) + jumpvec(1,k)
-!		y = site0(2) + jumpvec(2,k)
-!		z = site0(3) + jumpvec(3,k)
-!		if (outside_xyz(x,y,z)) cycle
-!		if (occupancy(x,y,z)%indx(1) == 0) then
-!			isout = .false.
-!			do j = 1,6
-!				xx = x + neumann(1,j)
-!				yy = y + neumann(2,j)
-!				zz = z + neumann(3,j)
-!				if (outside_xyz(xx,yy,zz)) cycle
-!				if (occupancy(xx,yy,zz)%indx(1) == OUTSIDE_TAG) then
-!					isout = .true.
-!					exit
-!				endif
-!			enddo
-!			if (isout) then
-!				done = .false.
-!				occupancy(x,y,z)%indx(1) = OUTSIDE_TAG
-!			endif
-!		endif
-!	enddo
-!enddo
-!end subroutine
-!
-!!-----------------------------------------------------------------------------------------
-!! A necrotic site migrates towards the blob centre, stopping when another necrotic 
-!! site is reached
-!!-----------------------------------------------------------------------------------------
-!subroutine NecroticMigration(site0)
-!integer :: site0(3)
-!integer :: site1(3), site2(3), site(3), j, jmin, kcell, tmp_indx
-!real(REAL_KIND) :: d1, d2, dmin
-!
-!!write(logmsg,*) 'NecroticMigration: site0: ',site0
-!!call logger(logmsg)
-!site1 = site0
-!do
-!	d1 = cdistance(site1)
-!	dmin = 1.0e10
-!	jmin = 0
-!	do j = 1,27
-!		if (j == 14) cycle
-!		site = site1 + jumpvec(:,j)
-!!		if (occupancy(site(1),site(2),site(3))%indx(1) < 0) cycle	! do not swap with another necrotic site
-!		if (occupancy(site(1),site(2),site(3))%indx(1) == 0) cycle	! do not swap with another necrotic site
-!		d2 = cdistance(site)
-!		if (d2 < dmin) then
-!			dmin = d2
-!			jmin = j
-!		endif
-!	enddo
-!	if (dmin >= d1) then
-!		site2 = site1
-!		exit
-!	endif
-!	if (jmin <= 0) then
-!		write(nflog,*) 'Error: jmin: ',jmin
-!		stop
-!	endif
-!	site2 = site1 + jumpvec(:,jmin)
-!	! Now swap site1 and site2
-!	kcell = occupancy(site2(1),site2(2),site2(3))%indx(1)
-!	tmp_indx = occupancy(site1(1),site1(2),site1(3))%indx(1)
-!	occupancy(site1(1),site1(2),site1(3))%indx(1) = kcell
-!	occupancy(site2(1),site2(2),site2(3))%indx(1) = tmp_indx
-!	cell_list(kcell)%site = site1
-!	site1 = site2
-!enddo
-!end subroutine
 
 !-----------------------------------------------------------------------------------------
 !-----------------------------------------------------------------------------------------
 subroutine test_CellDivision(ok)
 logical :: ok
 integer :: kcell, kpar=0
+type(cell_type), pointer :: cp
+
 kcell = random_int(1,nlist,kpar)
-call CellDivider(kcell,ok)
+cp => cell_list(kcell)
+call divider(cp,ok)
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -600,119 +434,177 @@ end subroutine
 ! 
 ! NOTE: now the medium concentrations are not affected by cell growth
 !-----------------------------------------------------------------------------------------
-subroutine CellGrowth(dt,ok)
+subroutine grower(dt, changed, ok)
 real(REAL_KIND) :: dt
-logical :: ok
-integer :: kcell, nlist0, site(3), ityp, idrug, ichemo, kpar=0
-integer :: divide_list(10000), ndivide, i
-real(REAL_KIND) :: tnow, C_O2, C_glucose, metab, metab_O2, metab_glucose, dVdt, vol0, R		!r_mean(2), c_rate(2)
-real(REAL_KIND) :: r_mean(MAX_CELLTYPES), c_rate(MAX_CELLTYPES)
-real(REAL_KIND) :: Vin_0, Vex_0, dV, minVex
-real(REAL_KIND) :: Cin_0(MAX_CHEMO), Cex_0(MAX_CHEMO)
-character*(20) :: msg
-logical :: drugkilled, oxygen_growth, glucose_growth, first_cycle
-integer :: C_option = 1
+logical :: changed, ok
+integer :: k, kcell, nlist0, ityp, idrug, prev_phase, kpar=0
 type(cell_type), pointer :: cp
+type(cycle_parameters_type), pointer :: ccp
+real(REAL_KIND) :: R
+integer :: ndivide, divide_list(1000)
+logical :: drugkilled
+logical :: mitosis_entry, in_mitosis, divide
 
-!call logger('CellGrowth')
 ok = .true.
+changed = .false.
+ccp => cc_parameters
 nlist0 = nlist
-tnow = istep*DELTA_T
-c_rate(1:2) = log(2.0)/divide_time_mean(1:2)		! Note: to randomise divide time need to use random number, not mean!
-r_mean(1:2) = Vdivide0/(2*divide_time_mean(1:2))
-oxygen_growth = chemo(OXYGEN)%controls_growth
-glucose_growth = chemo(GLUCOSE)%controls_growth
 ndivide = 0
-minVex = 1.0e10
+!tnow = istep*DELTA_T !+ t_fmover
+!if (colony_simulation) write(*,*) 'grower: ',nlist0,use_volume_method,tnow
 do kcell = 1,nlist0
-	cp => cell_list(kcell)
+	kcell_now = kcell
+	if (colony_simulation) then
+	    cp => ccell_list(kcell)
+	else
+    	cp => cell_list(kcell)
+    endif
 	if (cp%state == DEAD) cycle
 	ityp = cp%celltype
-	if (cp%volume < cp%divide_volume) then	! still growing - not delayed
-		C_O2 = cp%conc(OXYGEN)
-		C_glucose = cp%conc(GLUCOSE)
-		if (oxygen_growth .and. glucose_growth) then
-		    metab_O2 = O2_metab(C_O2)
-    		metab_glucose = glucose_metab(C_glucose)
-			metab = metab_O2*metab_glucose
-		elseif (oxygen_growth) then
-		    metab_O2 = O2_metab(C_O2)
-			metab = metab_O2
-		elseif (glucose_growth) then
-    		metab_glucose = glucose_metab(C_glucose)
-			metab = metab_glucose
-		endif
-		dVdt = get_dVdt(cp,metab)
-		if (suppress_growth) then	! for checking solvers
-			dVdt = 0
-		endif
-		Cin_0 = cp%conc
-!		Cex_0 = occupancy(site(1),site(2),site(3))%C
-        Cex_0 = Caverage(MAX_CHEMO+1:2*MAX_CHEMO)
-		cp%dVdt = dVdt
-		Vin_0 = cp%volume*Vcell_cm3	! cm^3
-		Vex_0 = Vsite_cm3 - Vin_0					! cm^3
-		dV = dVdt*dt*Vcell_cm3						! cm^3
-		cp%volume = (Vin_0 + dV)/Vcell_cm3
-		if (C_option == 1) then
-			! Calculation based on transfer of an extracellular volume dV with constituents, i.e. holding extracellular concentrations constant
-			cp%conc = (Vin_0*Cin_0 + dV*Cex_0)/(Vin_0 + dV)
-!			occupancy(site(1),site(2),site(3))%C = (Vex_0*Cex_0 - dV*Cex_0)/(Vex_0 - dV)	! = Cex_0
-		elseif (C_option == 2) then
-			! Calculation based on change in volumes without mass transfer of constituents
-			cp%conc = Vin_0*Cin_0/(Vin_0 + dV)
-!			occupancy(site(1),site(2),site(3))%C = Vex_0*Cex_0/(Vex_0 - dV)
-		endif
-		minVex = min(minVex,Vex_0 - dV)
+	divide = .false.
+	mitosis_entry = .false.
+	in_mitosis = .false.
+	if (use_volume_method) then
+!        if (colony_simulation) then
+!            write(*,'(a,i6,L2,2e12.3)') 'kcell: ',kcell,cp%Iphase,cp%V,cp%divide_volume
+!        endif
+	    if (cp%Iphase) then
+		    call growcell(cp,dt)
+		    if (cp%V > cp%divide_volume) then	! time to enter mitosis
+    	        mitosis_entry = .true.
+	        endif
+	    else
+	        in_mitosis = .true.
+	    endif
+	else
+	    prev_phase = cp%phase
+        call timestep(cp, ccp, dt)
+        if (cp%phase >= M_phase) then
+            if (prev_phase == Checkpoint2) then
+                mitosis_entry = .true.
+            else
+                in_mitosis = .true.
+            endif
+        endif
+		if (cp%phase < Checkpoint2) then
+		    call growcell(cp,dt)
+		endif	
 	endif
-	
-	if (cp%volume > cp%divide_volume) then	! time to divide
+	if (mitosis_entry) then
 		drugkilled = .false.
 		do idrug = 1,ndrugs_used
 			if (cp%drug_tag(idrug)) then
-				R = par_uni(kpar)
-				if (R < cp%p_drug_death(idrug)) then
-					call CellDies(kcell)
-					Ndrug_dead(idrug,ityp) = Ndrug_dead(idrug,ityp) + 1
-					drugkilled = .true.
-					exit
-				endif
+				call CellDies(cp)
+				changed = .true.
+				Ndrug_dead(idrug,ityp) = Ndrug_dead(idrug,ityp) + 1
+				drugkilled = .true.
+				exit
 			endif
 		enddo
 		if (drugkilled) cycle
-
-		if (cp%growth_delay) then
-			if (cp%G2_M) then
-				if (tnow > cp%t_growth_delay_end) then
-					cp%G2_M = .false.
+			
+		if (use_volume_method) then
+			if (cp%growth_delay) then
+				if (cp%G2_M) then
+					if (tnow > cp%t_growth_delay_end) then
+						cp%G2_M = .false.
+					else
+						cycle
+					endif
 				else
+					cp%t_growth_delay_end = tnow + cp%dt_delay
+					cp%G2_M = .true.
 					cycle
 				endif
-			else
-				cp%t_growth_delay_end = tnow + cp%dt_delay
-				cp%G2_M = .true.
-				cycle
 			endif
-		endif
-		! try moving death prob test to here
-		if (cp%radiation_tag) then
-			R = par_uni(kpar)
-			if (R < cp%p_rad_death) then
-				call CellDies(kcell)
+			! try moving death prob test to here
+			if (cp%radiation_tag) then
+				R = par_uni(kpar)
+				if (R < cp%p_rad_death) then
+					call CellDies(cp)
+					changed = .true.
+					Nradiation_dead(ityp) = Nradiation_dead(ityp) + 1
+					cycle
+				endif
+			endif		
+		else
+		    ! Check for cell death by radiation lesions
+		    ! For simplicity: 
+		    !   cell death occurs only at mitosis entry
+		    !   remaining L1 lesions and L2c misrepair (non-reciprocal translocation) are treated the same way
+		    !   L2a and L2b are treated as non-fatal
+		    if (cp%NL1 > 0 .or. cp%NL2(2) > 0) then
+				call CellDies(cp)
+				changed = .true.
 				Nradiation_dead(ityp) = Nradiation_dead(ityp) + 1
 				cycle
-			endif
+			endif		        
 		endif
-	    ndivide = ndivide + 1
-	    divide_list(ndivide) = kcell
+		
+		cp%Iphase = .false.
+		cp%mitosis = 0
+		cp%t_start_mitosis = tnow
+!		ncells_mphase = ncells_mphase + 1
+	elseif (in_mitosis) then
+		cp%mitosis = (tnow - cp%t_start_mitosis)/mitosis_duration
+        if (cp%mitosis >= 1) then
+			divide = .true.
+		endif
+	endif
+	if (divide) then
+		ndivide = ndivide + 1
+		divide_list(ndivide) = kcell
 	endif
 enddo
-do i = 1,ndivide
-    kcell = divide_list(i)
-	kcell_dividing = kcell
-	call CellDivider(kcell, ok)
+do k = 1,ndivide
+	changed = .true.
+	kcell = divide_list(k)
+	if (colony_simulation) then
+	    cp => ccell_list(kcell)
+	else
+    	cp => cell_list(kcell)
+    endif
+	call divider(cp, ok)
 	if (.not.ok) return
 enddo
+end subroutine
+
+!-----------------------------------------------------------------------------------------
+!-----------------------------------------------------------------------------------------
+subroutine growcell(cp, dt)
+type(cell_type), pointer :: cp
+real(REAL_KIND) :: dt
+real(REAL_KIND) :: Cin_0(NCONST), Cex_0(NCONST)		! at some point NCONST -> MAX_CHEMO
+real(REAL_KIND) :: dVdt,  dV, metab_O2, metab_glucose, metab
+logical :: oxygen_growth, glucose_growth
+
+if (colony_simulation) then
+    metab = 1
+    dVdt = get_dVdt(cp,metab)
+else
+    oxygen_growth = chemo(OXYGEN)%controls_growth
+    glucose_growth = chemo(GLUCOSE)%controls_growth
+    Cin_0 = cp%Cin
+    metab_O2 = O2_metab(Cin_0(OXYGEN))	! Note that currently growth depends only on O2
+    metab_glucose = glucose_metab(Cin_0(GLUCOSE))
+    if (oxygen_growth .and. glucose_growth) then
+	    metab = metab_O2*metab_glucose
+    elseif (oxygen_growth) then
+	    metab = metab_O2
+    elseif (glucose_growth) then
+	    metab = metab_glucose
+    endif
+    dVdt = get_dVdt(cp,metab)
+    if (suppress_growth) then	! for checking solvers
+	    dVdt = 0
+    endif
+endif
+cp%dVdt = dVdt
+dV = dVdt*dt
+if (use_cell_cycle .and. .not.(cp%phase == G1_phase .or. cp%phase == S_phase .or. cp%phase == G2_phase)) then
+    dV = 0
+endif
+cp%V = cp%V + dV
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -726,10 +618,14 @@ type(cell_type), pointer :: cp
 oxygen_growth = chemo(OXYGEN)%controls_growth
 glucose_growth = chemo(GLUCOSE)%controls_growth
 do kcell = 1,nlist
-	cp => cell_list(kcell)
+    if (colony_simulation) then
+        cp => ccell_list(kcell)
+    else
+        cp => cell_list(kcell)
+    endif
 	if (cp%state == DEAD) cycle
 	C_O2 = chemo(OXYGEN)%bdry_conc
-	C_glucose = cp%conc(GLUCOSE)
+	C_glucose = cp%Cin(GLUCOSE)
 	if (oxygen_growth .and. glucose_growth) then
 	    metab_O2 = O2_metab(C_O2)
 		metab_glucose = glucose_metab(C_glucose)
@@ -750,6 +646,9 @@ enddo
 end subroutine
 
 !-----------------------------------------------------------------------------------------
+! Need to account for time spent in mitosis.  Because there is no growth during mitosis,
+! the effective divide_time must be reduced by mitosis_duration.
+! Note that TERMINAL_MITOSIS is the only option.
 !-----------------------------------------------------------------------------------------
 function get_dVdt(cp, metab) result(dVdt)
 type(cell_type), pointer :: cp
@@ -757,107 +656,116 @@ real(REAL_KIND) :: metab, dVdt
 integer :: ityp
 real(REAL_KIND) :: r_mean, c_rate
 
-if (use_V_dependence) then
-	if (use_constant_divide_volume) then
-		dVdt = metab*log(2.0)*cp%volume/cp%divide_time
-	else
-		ityp = cp%celltype
-		c_rate = log(2.0)/divide_time_mean(ityp)
-		dVdt = c_rate*cp%volume*metab
-	endif
+ityp = cp%celltype
+if (use_cell_cycle) then
+    if (use_constant_growthrate) then
+        dVdt = max_growthrate(ityp)
+    else
+        dVdt = metab*max_growthrate(ityp)
+    endif
 else
-	if (use_constant_divide_volume) then
-		dVdt = metab*Vdivide0/(2*cp%divide_time)
-	else
-		ityp = cp%celltype
-		r_mean = Vdivide0/(2*divide_time_mean(ityp))
-		dVdt = r_mean*metab
-	endif
+    if (use_V_dependence) then
+	    if (use_constant_divide_volume) then
+		    dVdt = metab*log(2.0)*cp%V/(cp%divide_time - mitosis_duration)
+	    else
+		    c_rate = log(2.0)/(divide_time_mean(ityp) - mitosis_duration)
+		    dVdt = c_rate*cp%V*metab
+	    endif
+    else
+	    if (use_constant_divide_volume) then
+		    dVdt = 0.5*metab*Vdivide0/(cp%divide_time  - mitosis_duration)
+	    else
+		    ityp = cp%celltype
+		    r_mean = 0.5*Vdivide0/(divide_time_mean(ityp) - mitosis_duration)
+		    dVdt = r_mean*metab
+	    endif
+    endif
 endif
 end function
 
+
 !-----------------------------------------------------------------------------------------
-! The dividing cell, kcell0, is at site0.
-! The cases are:
-!   (0) If there is a vacant interior neighbour site, this is used for the daughter cell, done.
-! Otherwise, a neighbour site site01 is chosen randomly.  This becomes the site for the daughter cell.
-! The cell occupying site01 must be moved to make way for the daughter cell.
-! site01 is:
-!   (1) outside the blob
-!   (2) on the boundary
-!   (3) inside the blob
-!
-! Revised simple mass balance
-! ---------------------------
-! In case (0), the effect on mass balance is insignificant, since the two sites are neighbours
-! and therefore have very similar extracellular concentrations.  For now no adjustment is done.
-! In case (1), same as case (0), no adjustment needed.
-! In cases (2) and (3), cells are displaced on a line from site01 to the first (nearest) vacant site.
-! The previously vacant site that receives a cell, at the end of the line of moved cells,
-! is site2.  Mass conservation is (approximately) conserved by an adjustment to the 
-! extracellular concentration at this site.  For this the extra conc at site0 is needed.
-! The extracellular concentration at site2 is adjusted to ensure that mass is conserved
-! approximately, on average.
-! Let: 
-! Vc = daughter cell volume = 0.8
-! Vi = volume of displaced cells, on average = 1.2
-! C0 = extracellular conc at site of division
-! Ci = extracellular conc at sites along the line of displacement
-! Cn = extracellular conc at unoccupied site that receives a cell (end of the line)
-! Change in extracellular mass:
-! + Vc.C0 at division site
-! + (V1 - Vc).C1 at neighbour site that daughter cell moves into
-! - Vn.Cn at the end site
-! Note that on average there is no change in extra volume at intermediate sites, since on
-! average the cells have the same volume = 1.2
-! Therefore the total change (increase) in mass dM = Vc.C0 + (V1 - Vc).C1 - Vn.Cn
-! Since Vc = 0.8 and V1 = Vn = 1.2 (on average), dM = 0.8C0 + 0.4C1 - 1.2Cn
-! and since C1 is approximately equal to C0 (neighbour sites), approx dM = 1.2(C0 - Cn)
-! The adjustment subtracts dM from the extra conc at the end site site2.
-! Cn -> (Vn.Cn - 1.2(C0-Cn))/Vn
-! where Vn is the normalised volume.
-! Note: this "simple" adjustment does not work.  The required additional mass at site2
-! is excessive, leads, for example, to O2 concentration that exceeds the boundary value.
+! New version
 !-----------------------------------------------------------------------------------------
-subroutine CellDivider(kcell0, ok)
-integer :: kcell0
+subroutine divider(cp1, ok)
+type(cell_type), pointer :: cp1
+!integer :: kcell1
 logical :: ok
-integer :: kpar=0
-integer :: j, k, kcell1, ityp, site0(3), site1(3), site2(3), site01(3), site(3), ichemo, nfree, bestsite(3)
-integer :: npath, path(3,200)
-real(REAL_KIND) :: tnow, R, v, vmax, V0, Tdiv, Cex0(MAX_CHEMO), M0(MAX_CHEMO), M1(MAX_CHEMO), alpha(MAX_CHEMO)
-real(REAL_KIND) :: cfse0, cfse1
-logical :: use_simple_mass_balance = .false.
+integer :: kcell2, ityp, nbrs0
+real(REAL_KIND) :: r(3), c(3), cfse0, cfse2, V0, Tdiv
+type(cell_type), pointer :: cp2
 
-if (dbug) then
-	write(logmsg,*) 'CellDivider: ',kcell0
-	call logger(logmsg)
-endif
-ok = .true.
-tnow = istep*DELTA_T
-cell_list(kcell0)%t_divide_last = tnow
-V0 = cell_list(kcell0)%volume/2
-cell_list(kcell0)%volume = V0
-cfse0 = cell_list(kcell0)%CFSE
-cell_list(kcell0)%CFSE = generate_CFSE(cfse0/2)
-cfse1 = cfse0 - cell_list(kcell0)%CFSE
-cell_list(kcell0)%t_anoxia = 0
-cell_list(kcell0)%t_aglucosia = 0
-
-!R = par_uni(kpar)
-!cell_list(kcell0)%divide_volume = Vdivide0 + dVdivide*(2*R-1)
-ityp = cell_list(kcell0)%celltype
-cell_list(kcell0)%divide_volume = get_divide_volume(ityp,V0, Tdiv)
-cell_list(kcell0)%divide_time = Tdiv
-cell_list(kcell0)%M = cell_list(kcell0)%M/2
-!write(nflog,'(a,i6,2f8.2)') 'divide: ',kcell0,cell_list(kcell0)%volume,cell_list(kcell0)%divide_volume
-!write(logmsg,'(a,f6.1)') 'Divide time: ',tnow/3600
+!write(*,*) 'divider:'
+!write(logmsg,*) 'divider: ',kcell1 
 !call logger(logmsg)
+ok = .true.
+!tnow = istep*DELTA_T
+!cp1 => cell_list(kcell1)
+if (ngaps > 0) then
+    kcell2 = gaplist(ngaps)
+    ngaps = ngaps - 1
+else
+	nlist = nlist + 1
+	if (nlist > MAX_NLIST) then
+		ok = .false.
+		call logger('Error: Maximum number of cells MAX_NLIST has been exceeded.  Increase and rebuild.')
+		return
+	endif
+	kcell2 = nlist
+endif
+ncells = ncells + 1
+if (colony_simulation) then
+    cp2 => ccell_list(kcell2)
+else
+	cp2 => cell_list(kcell2)
+endif
+ityp = cp1%celltype
+ncells_type(ityp) = ncells_type(ityp) + 1
+ncells_mphase = ncells_mphase - 1
+!cp2 => cell_list(kcell2)
 
-site0 = [0,0,0]
-call CloneCell(kcell0,kcell1,site0,ok)
-cell_list(kcell1)%CFSE = cfse1
+cp1%state = ALIVE
+cp1%generation = cp1%generation + 1
+V0 = cp1%V/2
+cp1%V = V0
+cp1%birthtime = tnow
+cp1%divide_volume = get_divide_volume(ityp,V0,Tdiv)
+cp1%divide_time = Tdiv
+cp1%mitosis = 0
+cfse0 = cp1%CFSE
+cp1%CFSE = generate_CFSE(cfse0/2)
+cfse2 = cfse0 - cp1%CFSE
 
+cp1%drug_tag = .false.
+cp1%anoxia_tag = .false.
+cp1%t_anoxia = 0
+cp1%aglucosia_tag = .false.
+cp1%t_aglucosia = 0
+
+if (cp1%growth_delay) then
+	cp1%N_delayed_cycles_left = cp1%N_delayed_cycles_left - 1
+	cp1%growth_delay = (cp1%N_delayed_cycles_left > 0)
+endif
+cp1%G2_M = .false.
+cp1%Iphase = .true.
+cp1%phase = G1_phase
+
+ndoublings = ndoublings + 1
+doubling_time_sum = doubling_time_sum + tnow - cp1%t_divide_last
+cp1%t_divide_last = tnow
+
+! Second cell
+!cell_list(kcell2) = cell_list(kcell1)
+cp2 = cp1
+
+! These are the variations from cp1
+cp2%divide_volume = get_divide_volume(ityp,V0,Tdiv)
+cp2%divide_time = Tdiv
+cp2%CFSE = cfse2
+if (cp2%radiation_tag) then
+	Nradiation_tag(ityp) = Nradiation_tag(ityp) + 1
+endif
+!if (colony_simulation) write(*,'(a,i6,2e12.3)') 'new cell: ',kcell2,cp2%V,cp2%divide_volume
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -866,13 +774,12 @@ end subroutine
 !-----------------------------------------------------------------------------------------
 subroutine CloneCell(kcell0,kcell1,site1,ok)
 integer :: kcell0, kcell1, site1(3), ityp, idrug
-!real(REAL_KIND) :: Cex0(:)
 logical :: ok
 integer :: kpar = 0
-real(REAL_KIND) :: tnow, V0, Tdiv, R, Vex, Cex(MAX_CHEMO)
+real(REAL_KIND) :: V0, Tdiv, R, Vex, Cex(MAX_CHEMO)
 
 ok = .true.
-tnow = istep*DELTA_T
+!tnow = istep*DELTA_T
 
 if (use_gaplist .and. ngaps > 0) then
     kcell1 = gaplist(ngaps)
@@ -925,7 +832,7 @@ do idrug = 1,ndrugs_used
 enddo
 cell_list(kcell1)%anoxia_tag = .false.
 cell_list(kcell1)%aglucosia_tag = .false.
-cell_list(kcell1)%exists = .true.
+!cell_list(kcell1)%exists = .true.
 cell_list(kcell1)%active = .true.
 cell_list(kcell1)%growth_delay = cell_list(kcell0)%growth_delay
 if (cell_list(kcell1)%growth_delay) then
@@ -935,15 +842,15 @@ endif
 cell_list(kcell1)%G2_M = .false.
 cell_list(kcell1)%t_divide_last = tnow
 cell_list(kcell1)%dVdt = cell_list(kcell0)%dVdt
-cell_list(kcell1)%volume = cell_list(kcell0)%volume
+cell_list(kcell1)%V = cell_list(kcell0)%V
 !R = par_uni(kpar)
 !cell_list(kcell1)%divide_volume = Vdivide0 + dVdivide*(2*R-1)
-V0 = cell_list(kcell0)%volume
+V0 = cell_list(kcell0)%V
 cell_list(kcell1)%divide_volume = get_divide_volume(ityp, V0, Tdiv)
 cell_list(kcell1)%divide_time = Tdiv
 cell_list(kcell1)%t_anoxia = 0
 cell_list(kcell1)%t_aglucosia = 0
-cell_list(kcell1)%conc = cell_list(kcell0)%conc
+cell_list(kcell1)%Cin = cell_list(kcell0)%Cin
 !cell_list(kcell1)%Cex = cell_list(kcell0)%Cex
 cell_list(kcell1)%dCdt = cell_list(kcell0)%dCdt
 cell_list(kcell1)%dMdt = cell_list(kcell0)%dMdt

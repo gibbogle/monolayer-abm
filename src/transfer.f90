@@ -4,17 +4,11 @@ module transfer
 
 use global
 use chemokine
-!use envelope
-use ode_diffuse
 use, intrinsic :: iso_c_binding
 
 #include "../src/version.h"
 
 implicit none
-
-!integer, parameter :: X_AXIS = 1
-!integer, parameter :: Y_AXIS = 2
-!integer, parameter :: Z_AXIS = 3
 
 type, bind(C) :: celldata_type
 	integer(c_int) :: tag
@@ -172,7 +166,7 @@ integer(c_int) :: summaryData(*), i_hypoxia_cutoff,i_growth_cutoff
 integer :: Nviable(MAX_CELLTYPES), Nlive(MAX_CELLTYPES), plate_eff_10(MAX_CELLTYPES)
 integer :: nhypoxic(3), nclonohypoxic(3), ngrowth(3), &
     hypoxic_percent_10, clonohypoxic_percent_10, growth_percent_10, necrotic_percent_10, &
-    medium_oxygen_1000, medium_glucose_1000, medium_drug_1000(2)
+    medium_oxygen_1000, medium_glucose_1000, medium_drug_1000(2), doubling_time_100
 integer :: TNanoxia_dead, TNaglucosia_dead, TNradiation_dead, TNdrug_dead(2),  TNviable, &
            Ntagged_anoxia(MAX_CELLTYPES), Ntagged_aglucosia(MAX_CELLTYPES), Ntagged_radiation(MAX_CELLTYPES), &
            Ntagged_drug(2,MAX_CELLTYPES), &
@@ -229,11 +223,17 @@ medium_glucose_1000 = cmedium(GLUCOSE)*1000.
 medium_drug_1000(1) = cmedium(DRUG_A)*1000.
 medium_drug_1000(2) = cmedium(DRUG_B)*1000.
 
-summaryData(1:20) = [ istep, Ncells, TNanoxia_dead, TNaglucosia_dead, TNdrug_dead(1), TNdrug_dead(2), TNradiation_dead, &
+if (ndoublings > 0) then
+    doubling_time_100 = (100*doubling_time_sum)/(3600*ndoublings)
+else
+    doubling_time_100 = 0
+endif
+
+summaryData(1:21) = [ istep, Ncells, TNanoxia_dead, TNaglucosia_dead, TNdrug_dead(1), TNdrug_dead(2), TNradiation_dead, &
     TNtagged_anoxia, TNtagged_aglucosia, TNtagged_drug(1), TNtagged_drug(2), TNtagged_radiation, &
 	hypoxic_percent_10, clonohypoxic_percent_10, growth_percent_10, Tplate_eff_10, &
-	medium_oxygen_1000, medium_glucose_1000, medium_drug_1000(1), medium_drug_1000(2) ]
-write(nfres,'(a,a,2a12,i8,e12.4,22i7,15e12.4)') trim(header),' ',gui_run_version, dll_run_version, &
+	medium_oxygen_1000, medium_glucose_1000, medium_drug_1000(1), medium_drug_1000(2), doubling_time_100 ]
+write(nfres,'(a,a,2a12,i8,e12.4,22i7,16e12.4)') trim(header),' ',gui_run_version, dll_run_version, &
 	istep, hour, Ncells_type(1:2), &
     Nanoxia_dead(1:2), Naglucosia_dead(1:2), Ndrug_dead(1,1:2), &
     Ndrug_dead(2,1:2), Nradiation_dead(1:2), &
@@ -241,7 +241,8 @@ write(nfres,'(a,a,2a12,i8,e12.4,22i7,15e12.4)') trim(header),' ',gui_run_version
     Ntagged_drug(2,1:2), Ntagged_radiation(1:2), &
 	nhypoxic(:)/real(Ncells), nclonohypoxic(:)/real(TNviable), ngrowth(:)/real(Ncells), &
 	plate_eff(1:2), &
-	cmedium(OXYGEN), cmedium(GLUCOSE), cmedium(DRUG_A), cmedium(DRUG_B)
+	cmedium(OXYGEN), cmedium(GLUCOSE), cmedium(DRUG_A), cmedium(DRUG_B), &
+	100*doubling_time_100
 		
 !call sum_dMdt(GLUCOSE)
 
@@ -257,7 +258,7 @@ nhypoxic = 0
 do kcell = 1,nlist
 	if (cell_list(kcell)%state == DEAD) cycle
 	do i = 1,3
-		if (cell_list(kcell)%conc(OXYGEN) < O2cutoff(i)) nhypoxic(i) = nhypoxic(i) + 1
+		if (cell_list(kcell)%Cin(OXYGEN) < O2cutoff(i)) nhypoxic(i) = nhypoxic(i) + 1
 	enddo
 enddo
 end subroutine
@@ -281,7 +282,7 @@ do kcell = 1,nlist
 	enddo
 	if (tagged) cycle
 	do i = 1,3
-		if (cell_list(kcell)%conc(OXYGEN) < O2cutoff(i)) then
+		if (cell_list(kcell)%Cin(OXYGEN) < O2cutoff(i)) then
 			nclonohypoxic(i) = nclonohypoxic(i) + 1
 		endif
 	enddo
@@ -296,13 +297,20 @@ integer :: ngrowth(3)
 integer :: kcell, i, ityp
 real(REAL_KIND) :: r_mean(2)
 
-r_mean(1:2) = Vdivide0/(2*divide_time_mean(1:2))
+if (use_cell_cycle) then
+    r_mean = max_growthrate
+else
+    r_mean = Vdivide0/(2*divide_time_mean)
+endif
 ngrowth = 0
 do kcell = 1,nlist
 	if (cell_list(kcell)%state == DEAD) cycle
 	ityp = cell_list(kcell)%celltype
 	do i = 1,3
-		if (cell_list(kcell)%dVdt < growthcutoff(i)*r_mean(ityp)) ngrowth(i) = ngrowth(i) + 1
+		if (cell_list(kcell)%dVdt < growthcutoff(i)*r_mean(ityp)) then
+		    ngrowth(i) = ngrowth(i) + 1
+!    	    write(*,'(a,3i6,3e12.3)') 'getGrowthCount: ',kcell,ityp,i,cell_list(kcell)%dVdt,growthcutoff(i),r_mean(ityp)
+		endif
 	enddo
 enddo
 
@@ -328,7 +336,7 @@ Nc = 0
 do kcell = 1,nlist
 	if (cell_list(kcell)%state == DEAD) cycle
 	Nc = Nc + 1
-	C = cell_list(kcell)%conc(ichemo)
+	C = cell_list(kcell)%Cin(ichemo)
 	Csum = Csum + C
 	metab = C**Nh/(chemo(ichemo)%MM_C0**Nh + C**Nh)
 	msum = msum + metab
@@ -378,10 +386,10 @@ elseif (cp%drug_tag(1)) then
 	status = 11
 elseif (cp%drug_tag(1)) then
 	status = 12
-elseif (cp%conc(OXYGEN) < hypoxia_threshold) then
+elseif (cp%Cin(OXYGEN) < hypoxia_threshold) then
 	status = 1	! radiobiological hypoxia
 !elseif (cp%mitosis > 0) then
-elseif (cp%volume > 0.9*cp%divide_volume) then  ! just a surrogate for mitosis
+elseif (cp%V > 0.9*cp%divide_volume) then  ! just a surrogate for mitosis
 	status = 3	! in mitosis
 else
 	status = 0
@@ -504,13 +512,13 @@ do kcell = 1,nlist
 			val = cell_list(kcell)%CFSE
 			cfse_min = min(val,cfse_min)
 		elseif (ichemo <= MAX_CHEMO) then
-			val = cell_list(kcell)%conc(ichemo)
+			val = cell_list(kcell)%Cin(ichemo)
 		elseif (ichemo == GROWTH_RATE) then
 			val = cell_list(kcell)%dVdt
 		elseif (ichemo == CELL_VOLUME) then
-			val = cell_list(kcell)%volume
+			val = cell_list(kcell)%V
 		elseif (ichemo == O2_BY_VOL) then
-			val = cell_list(kcell)%volume*cell_list(kcell)%conc(OXYGEN)
+			val = cell_list(kcell)%V*cell_list(kcell)%Cin(OXYGEN)
 		endif
 		k = k+1
 		facs_data(k) = val
@@ -582,13 +590,13 @@ do kcell = 1,nlist
 		if (ichemo == 0) then
 			val = cell_list(kcell)%CFSE
 		elseif (ichemo <= MAX_CHEMO) then
-			val = cell_list(kcell)%conc(ichemo)
+			val = cell_list(kcell)%Cin(ichemo)
 		elseif (ichemo == GROWTH_RATE) then
 			val = cell_list(kcell)%dVdt
 		elseif (ichemo == CELL_VOLUME) then
-			val = Vcell_pL*cell_list(kcell)%volume
+			val = Vcell_pL*cell_list(kcell)%V
 		elseif (ichemo == O2_BY_VOL) then
-			val = cell_list(kcell)%conc(OXYGEN)*Vcell_pL*cell_list(kcell)%volume
+			val = cell_list(kcell)%Cin(OXYGEN)*Vcell_pL*cell_list(kcell)%V
 		endif
 		valmax(ict+1,ivar) = max(valmax(ict+1,ivar),val)	! cell type 1 or 2
 		valmax(1,ivar) = max(valmax(1,ivar),val)			! both
@@ -629,13 +637,13 @@ do kcell = 1,nlist
 		if (ichemo == 0) then
 			val = cell_list(kcell)%CFSE
 		elseif (ichemo <= MAX_CHEMO) then
-			val = cell_list(kcell)%conc(ichemo)
+			val = cell_list(kcell)%Cin(ichemo)
 		elseif (ichemo == GROWTH_RATE) then
 			val = cell_list(kcell)%dVdt
 		elseif (ichemo == CELL_VOLUME) then
-			val = Vcell_pL*cell_list(kcell)%volume
+			val = Vcell_pL*cell_list(kcell)%V
 		elseif (ichemo == O2_BY_VOL) then
-			val = cell_list(kcell)%conc(OXYGEN)*Vcell_pL*cell_list(kcell)%volume
+			val = cell_list(kcell)%Cin(OXYGEN)*Vcell_pL*cell_list(kcell)%V
 		endif
 		k = (val-valmin(1,ivar))/dv(1,ivar) + 1
 		k = min(k,nhisto)

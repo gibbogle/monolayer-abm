@@ -385,6 +385,93 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
 "Delay growth of all cells",
 "Cell cycle delay is also applied to cells that are not fated to die"},
 
+    {"USE_CELL_CYCLE", 1,0,1,
+     "Use cell cycle with G1, S, G2, M phases",
+     "Cell cycle parameters determine the time spent in each phase.\n\
+     In the case of G1 and G2, an exponentially distributed random delay is added"},
+
+     {"T_G1_1", 10, 0, 0,
+     "G1 phase base time (h)",
+     "Deterministic component of time spent in phase G1"},
+
+     {"T_G1_2", 10, 0, 0,
+     "G1 phase base time (h)",
+     "Deterministic component of time spent in phase G1"},
+
+     {"T_S_1", 8, 0, 0,
+     "S phase base time (h)",
+     "Time spent in phase S"},
+
+     {"T_S_2", 8, 0, 0,
+     "S phase base time (h)",
+     "Time spent in phase S"},
+
+     {"T_G2_1", 1, 0, 0,
+     "G2 phase base time (h)",
+     "Deterministic component of time spent in phase G2"},
+
+     {"T_G2_2", 1, 0, 0,
+     "G2 phase base time (h)",
+     "Deterministic component of time spent in phase G2"},
+
+     {"T_M_1", 0.5, 0, 0,
+     "M phase base time (h)",
+     "Time spent in phase M"},
+
+     {"T_M_2", 0.5, 0, 0,
+     "M phase base time (h)",
+     "Time spent in phase M"},
+
+     {"G1_MEAN_DELAY_1", 2.5, 0, 0,
+     "G1 mean delay (h)",
+     "Mean of the random component of time spent in phase G1 (exponentially distributed)"},
+
+     {"G1_MEAN_DELAY_2", 2.5, 0, 0,
+     "G1 mean delay (h)",
+     "Mean of the random component of time spent in phase G1 (exponentially distributed)"},
+
+     {"G2_MEAN_DELAY_1", 2, 0, 0,
+     "G2 mean delay (h)",
+     "Mean of the random component of time spent in phase G2 (exponentially distributed)"},
+
+     {"G2_MEAN_DELAY_2", 2, 0, 0,
+     "G2 mean delay (h)",
+     "Mean of the random component of time spent in phase G2 (exponentially distributed)"},
+
+     {"RMR_ETA_PL_1", 0.6, 0, 0,
+     "PL lesion L1 creation rate",
+     "Coefficient of rate of creation of L1 potentially lethal lesions: eta_PL"},
+
+     {"RMR_ETA_L_1_1", 0.0, 0, 0,
+     "Lesion L2b creation rate",
+     "Coefficient of rate of creation of L2b lesions: eta_L(1)"},
+
+     {"RMR_ETA_L_2_1", 0.14, 0, 0,
+     "Lesion L2c creation rate",
+     "Coefficient of rate of creation of L2c lesions: eta_L(2)"},
+
+     {"RMR_KREP_BASE_1", 0.1, 0, 0,
+     "Base lesion L1 repair rate",
+     "Base coefficient of rate of repair of L1 potentially lethal lesions: Krepair_base (Curtis's epsilon_PL)\n\
+     The true repair rate varies linearly from Krepair_base to Krepair_max over the S phase"},
+
+     {"RMR_KREP_MAX_1", 0.8, 0, 0,
+     "Max lesion L1 repair rate",
+     "Maximum coefficient of rate of repair of L1 potentially lethal lesions: Krepair_max (Curtis's epsilon_PL)\n\
+     The true repair rate varies linearly from Krepair_base to Krepair_max over the S phase"},
+
+     {"RMR_KMIS_1_1", 0.0278, 0, 0,
+     "Lesion misrepair rate to L2b",
+     "Coefficient of rate of misrepair of L1 potentially lethal lesions to L2b: (Curtis's epsilon_2PL)"},
+
+     {"RMR_KMIS_2_1", 0.0278, 0, 0,
+     "Lesion misrepair rate to L2c",
+     "Coefficient of rate of misrepair of L1 potentially lethal lesions to L2c: (Curtis's epsilon_2PL)"},
+
+     {"RMR_KCP_1", 0.13, 0, 0,
+     "Checkpoint time limit factor",
+     "Factor for computing maximum time spent in the checkpoint, as a function of # of L1 lesions"},
+
 {"HYPOXIA_1", 0.1, 0, 0,
 "Hypoxia threshold 1",
 "Hypoxia threshold 1"},
@@ -511,8 +598,9 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
     {"platingefficiency",         1, 0,1,"","Percentage of live cells that are viable"},
     {"mediumoxygen",              1, 0,1,"","Average concentration of oxygen in the medium (far-field)"},
     {"mediumglucose",             1, 0,1,"","Average concentration of glucose in the medium (far-field)"},
-    {"mediumdrugA",               1, 0,1,"","Average concentration of drug A in the medium (far-field)"},
+    {"mediumdrugA",               0, 0,1,"","Average concentration of drug A in the medium (far-field)"},
     {"mediumdrugB",               0, 0,1,"","Average concentration of drug B in the medium (far-field)"},
+    {"doublingtime",              1, 0,1,"","Average doubling time"},
 
 /*
 // Profile plots

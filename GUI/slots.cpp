@@ -333,3 +333,25 @@ void MainWindow::on_checkBox_show_cells_toggled()
     field->show_cells = checkBox_show_cells->isChecked();
     field->displayField(field->hour,&res);
 }
+
+//--------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------
+void MainWindow::on_checkBox_colony_toggled()
+{
+    Global::simulate_colony = checkBox_colony->isChecked();
+}
+
+//--------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------
+void MainWindow::clickedGraph(QMouseEvent *event)
+{
+    if (event->button() == Qt::RightButton) {
+        LOG_MSG("Right button click");
+        QString fileName = QFileDialog::getSaveFileName(this, tr("Select image file"), ".",
+            tr("Image files (*.png)"));
+        if (fileName.compare("") == 0) {
+            return;
+        }
+        colony_plot->savePng(fileName);
+    }
+}

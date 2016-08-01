@@ -76,5 +76,9 @@ namespace Global
     bool showingField;
     bool recordingField;
 
+    bool simulate_colony;
+    double dist[40];
+    double ddist = 50;
+    int ndist = 40;
 
 } // namespace Global

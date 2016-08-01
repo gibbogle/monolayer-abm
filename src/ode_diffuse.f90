@@ -19,16 +19,6 @@ use rkc_90
 
 implicit none
 
-!integer, parameter :: MAX_VARS = 2*max_nlist
-!integer, parameter :: RKF45_SOLVE = 1
-!integer, parameter :: RKSUITE_SOLVE = 2
-!integer, parameter :: RKC_SOLVE = 3
-!integer, parameter :: IRKC_SOLVE = 4
-!logical, parameter :: EXPLICIT_INTRA = .false.
-!real(REAL_KIND), allocatable :: allstate(:,:)
-!real(REAL_KIND), allocatable :: allstatep(:,:)
-!real(REAL_KIND), allocatable :: work_rkc(:)
-
 integer :: ivdbug
 
 real(REAL_KIND) :: work_rkc(8+5*2*MAX_CHEMO)
@@ -62,7 +52,7 @@ do kcell = 1,nlist
 	do i = 1,ndrugs_present
 	    ichemo = drug_present(i)
 	    idrug = drug_number(i)
-	    if (cp%conc(ichemo) > Cthreshold) drug_gt_cthreshold(idrug) = .true.
+	    if (cp%Cin(ichemo) > Cthreshold) drug_gt_cthreshold(idrug) = .true.
 !	    if (cp%Cex(ichemo) > Cthreshold) drug_gt_cthreshold(idrug) = .true.
 	enddo
 enddo
@@ -83,7 +73,7 @@ end subroutine
 !   dC/dt = -flux/V
 ! where:
 !   V = total volume of medium
-!   C = medium concentration %conc
+!   C = medium concentration %Cin
 !
 ! neqn = 2*ncvars = 2*number of constituents present
 ! ic > ncvars implies a medium concentration
@@ -107,7 +97,7 @@ if (use_average_volume) then
 endif
 !Vcell_actual = Vcell_cm3*cell_list(kcell)%volume
 !vol_cm3 = Vcell_actual	            ! accounting for cell volume change
-!Cin = cell_list(kcell)%conc
+!Cin = cell_list(kcell)%Cin
 !ict = cell_list(kcell)%celltype
 ncvars = neqn/2
 do ic = 1,ncvars
@@ -276,7 +266,7 @@ do ic = 1,nchemo
     Caverage(ichemo) = C(k)
     do kcell = 1,nlist
         if (cell_list(kcell)%state == DEAD) cycle
-        cell_list(kcell)%conc(ichemo) = Caverage(ichemo)
+        cell_list(kcell)%Cin(ichemo) = Caverage(ichemo)
     enddo
 enddo
 k = ncvars
@@ -391,15 +381,6 @@ end function
 
 !----------------------------------------------------------------------------------
 !----------------------------------------------------------------------------------
-!subroutine UpdateCbnd(dt)
-!real(REAL_KIND) :: dt
-!
-!call UpdateCbnd_1D
-!call UpdateChemomap
-!end subroutine
-
-!----------------------------------------------------------------------------------
-!----------------------------------------------------------------------------------
 subroutine UpdateCbnd_1D
 integer :: kpar = 0
 integer :: i, ic, ichemo
@@ -424,138 +405,7 @@ do idrug = 1,ndrugs_used
 	endif
 enddo
 
-!if ((tnow - t_lastmediumchange) > t_buffer) then
-!	chemo(OXYGEN)%medium_Cbnd = alpha_Cbnd*chemo(OXYGEN)%medium_Cbnd + (1 - alpha_Cbnd)*chemo(OXYGEN)%medium_Cbnd_prev
-!endif
-!write(nflog,'(a,2e12.3)') 'medium_Cbnd: ',chemo(1:2)%medium_Cbnd
-!chemo(OXYGEN)%medium_Cbnd_prev = chemo(OXYGEN)%medium_Cbnd
-
 end subroutine
-
-!---------------------------------------------------------------------------------- 
-! The medium concentrations are updated explicitly, assuming a sphere with 
-! known total uptake rate U.
-! Compute U and update M, Cext, Cbnd.
-! Note that for O2 Cext is fixed.
-! Need to include decay
-! Need to estimate U in a different way.
-! Use the total cell uptake and decay within the blob.
-! The change in total mass in the medium M is minus the sum of decay and U.dt
-! The far-field concentration Cext is inferred from M.
-! If the blob radius is R1 and the radius of the boundary layer is R2 = R1 + d_layer,
-! then the concentration distribution in the layer at radius r is:
-! C(r) = Cext + U/(4.pi.K).(1/R2 - 1/r)
-! where K = diffusion coefficient in the unstirred layer
-! By integrating C(r) and adding the portion at Cext we find the total mass is:
-! M = Cext.Vmedium + (U/K)[(R2^3-R1^3)/(3R2) + (R2^2 - R1^2)/2)]
-! which can be solved for Cext when U, M, R1 and R2 are known.
-! Note that Vmedium = total_volume - Vblob = total_volume - (4/3)pi.R1^3
-! From Cext, Cbnd = Cext + U/(4.pi.K).(1/R2 - 1/R1)
-!----------------------------------------------------------------------------------
-subroutine UpdateCbnd_mixed(dt)
-real(REAL_KIND) :: dt
-integer :: i, k, ichemo, ntvars
-real(REAL_KIND) :: R1, R2, U(MAX_CHEMO)
-real(REAL_KIND) :: a, Rlayer(MAX_CHEMO)
-integer :: kcell, Nh, Nc
-real(REAL_KIND) :: C, metab, dMdt, asum
-real(REAL_KIND) :: Kin, Kout, decay_rate, vol_cm3, Cin, Cex
-integer :: idrug, iparent, im
-
-!write(*,*) 'UpdateCbnd_mixed'
-! Start by looking at a conservative constituent (e.g. glucose)
-! Contribution from cell uptake
-!U = 0
-!do ichemo = 1,MAX_CHEMO
-!	if (.not.chemo(ichemo)%present) cycle
-!	if (chemo(ichemo)%constant) then
-!		chemo(ichemo)%medium_Cbnd = chemo(ichemo)%bdry_conc
-!		cycle
-!	endif
-!	if (ichemo == OXYGEN .or. ichemo == GLUCOSE) then
-!		Nh = chemo(ichemo)%Hill_N
-!		asum = 0
-!		Nc = 0
-!		do kcell = 1,nlist
-!			if (cell_list(kcell)%state == DEAD) cycle
-!			Nc = Nc + 1
-!			C = cell_list(kcell)%conc(ichemo)
-!			metab = C**Nh/(chemo(ichemo)%MM_C0**Nh + C**Nh)
-!			dMdt = metab*chemo(ichemo)%max_cell_rate 
-!			asum = asum + dMdt
-!		enddo
-!		U(ichemo) = asum
-!	else
-!		! need to sum cell uptake and decay, and extracellular decay
-!		decay_rate = chemo(ichemo)%decay_rate
-!		Kin = chemo(ichemo)%membrane_diff_in
-!		Kout = chemo(ichemo)%membrane_diff_out
-!		asum = 0	
-!		ntvars = ODEdiff%nextra + ODEdiff%nintra
-!		do i = 1,ntvars
-!			if (ODEdiff%vartype(i) == EXTRA) then
-!				if (decay_rate == 0) cycle	! currently there is no distinction between intra- and extracellular decay rate
-!				vol_cm3 = Vsite_cm3
-!				Cex = allstate(i,ichemo)
-!				if (i < ntvars) then
-!					if (ODEdiff%vartype(i+1) == INTRA) then
-!						kcell = ODEdiff%cell_index(i+1)		! for access to cell-specific parameters (note that the intra variable follows the extra variable)
-!						vol_cm3 = Vsite_cm3 - Vcell_cm3*cell_list(kcell)%volume	! accounting for cell volume change
-!					endif
-!				endif
-!				asum = asum + vol_cm3*Cex*decay_rate
-!			else
-!				Cin = allstate(i,ichemo)
-!				kcell = ODEdiff%cell_index(i)
-!				vol_cm3 = Vcell_cm3*cell_list(kcell)%volume
-!				asum = asum + vol_cm3*Cin*decay_rate
-!				! add cell uptake rate
-!				Cex = allstate(i-1,ichemo)
-!				asum = asum + Kin*Cex - Kout*Cin
-!			endif
-!		enddo
-!		U(ichemo) = asum
-!	endif
-!enddo
-!chemo(:)%medium_U = U(:)
-!
-!! First need the spheroid radius
-!!call SetRadius(Nsites)
-!R1 = blob_radius*DELTA_X		! cm
-!Rlayer(:) = R1 + chemo(:)%medium_dlayer
-!do ichemo = 1,MAX_CHEMO
-!	if (.not.chemo(ichemo)%present) cycle
-!	if (chemo(ichemo)%constant) cycle
-!	R2 = Rlayer(ichemo)
-!	if (ichemo /= OXYGEN) then	! update %medium_M, then %medium_Cext
-!		chemo(ichemo)%medium_M = chemo(ichemo)%medium_M*(1 - chemo(ichemo)%decay_rate*dt) - U(ichemo)*dt
-!		chemo(ichemo)%medium_M = max(0.0,chemo(ichemo)%medium_M)
-!		chemo(ichemo)%medium_Cext = (chemo(ichemo)%medium_M - (U(ichemo)/(6*chemo(ichemo)%medium_diff_coef)*R2) &
-!			*(R1*R1*(3*R2 - 2*R1) - R2*R2*R2))/(total_volume - 4*PI*R1*R1*R1/3.)
-!	endif
-!	a = (1/R2 - 1/R1)/(4*PI*chemo(ichemo)%medium_diff_coef)
-!	chemo(ichemo)%medium_Cbnd = chemo(ichemo)%medium_Cext + a*chemo(ichemo)%medium_U
-!	if (chemo(ichemo)%medium_Cbnd < 0) then
-!		write(nflog,'(a,i2)') 'Setting negative medium_Cbnd to 0: Cbnd,M,Cext,a,U: ',ichemo
-!		write(nflog,'(5e12.3)') chemo(ichemo)%medium_Cbnd,chemo(ichemo)%medium_M,chemo(ichemo)%medium_Cext,a,chemo(ichemo)%medium_U
-!		chemo(ichemo)%medium_Cbnd = 0
-!	endif
-!enddo
-!
-!do idrug = 1,ndrugs_used
-!	iparent = TRACER + 1 + 3*(idrug-1)
-!	if (chemo(iparent)%present) then		! simulation with this drug has started
-!	    do im = 0,2
-!	        ichemo =iparent + im
-!	        if (chemo(ichemo)%medium_Cext > Cthreshold) drug_gt_cthreshold(idrug) = .true.
-!	        if (chemo(ichemo)%medium_Cbnd > Cthreshold) drug_gt_cthreshold(idrug) = .true.
-!	    enddo
-!	endif
-!enddo
-
-!write(nflog,'(a,10e12.3)') 'UpdateCbnd_mixed: ',chemo(:)%medium_Cbnd
-end subroutine
-
 
 end module
 

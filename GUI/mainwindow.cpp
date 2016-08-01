@@ -164,6 +164,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     tabs->setCurrentIndex(9);
     setupPopup();
+    pushButton_colony->setEnabled(false);
     goToInputs();
 }
 
@@ -2008,6 +2009,7 @@ void MainWindow::runServer()
     exthread->nsteps = int(hours*60/Global::DELTA_T);
 	exthread->paused = false;
 	exthread->stopped = false;
+    pushButton_colony->setEnabled(false);
     LOG_MSG("exthread->start");
     exthread->start();
 }
@@ -2388,6 +2390,10 @@ void MainWindow::postConnection()
 	// Add the new result set to the list
 //	result_list.append(newR);
     posdata = false;
+    if (checkBox_colony->isChecked()) {
+        pushButton_colony->setEnabled(true);
+        pushButton_colony_clicked();
+    }
 	LOG_MSG("completed postConnection");
 }
 
@@ -2708,10 +2714,15 @@ void MainWindow::changeParam()
                     disableUseTracer();
             }
 
-            if (checkBox->isChecked()) {
-                v = 1;
-            } else {
-                v = 0;
+            if (wname.contains("USE_CELL_CYCLE")) {
+                bool ch = checkBox->isChecked();
+                groupBox_cellcycle->setEnabled(ch);
+                groupBox_radiation_RMR->setEnabled(ch);
+                groupBox_radiation_LQ->setEnabled(!ch);
+                qwtPlot_DIVIDE_TIME_1->setEnabled(!ch);
+                qwtPlot_DIVIDE_TIME_2->setEnabled(!ch);
+                groupBox_volumemethod->setEnabled(!ch);
+                groupBox_divisiondistributions->setEnabled(!ch);
             }
 
             if (checkBox->isChecked()) {

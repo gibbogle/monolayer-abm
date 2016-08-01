@@ -189,7 +189,6 @@ void ExecThread::run()
 //    get_string(&b);
 //    LOG_MSG(b);
 
-
     get_dimensions(&nsteps, &Global::DELTA_T, &Global::MAX_CHEMO, &Global::N_EXTRA, cused);
     summary_interval = int(3600./Global::DELTA_T);
     sprintf(msg,"exthread: nsteps: %d summary_interval: %d",nsteps,summary_interval);
@@ -281,6 +280,11 @@ void ExecThread::run()
 //    snapshot();
 //    LOG_MSG("got snapshot:");
     sleep(100);
+
+    if (Global::simulate_colony) {
+        make_colony_distribution(Global::dist, &Global::ddist, &Global::ndist);
+    }
+
 	LOG_MSG("ExecThread::run: call terminate_run");
 	terminate_run(&res);
 

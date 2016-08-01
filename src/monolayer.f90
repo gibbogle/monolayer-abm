@@ -5,8 +5,8 @@ use ode_diffuse
 use cellstate
 use winsock  
 use colony
-!use envelope
 use transfer
+use Tcp_mod
 
 IMPLICIT NONE
 
@@ -24,10 +24,13 @@ character*(*) :: infile, outfile
 logical :: ok
 character*(64) :: msg
 integer :: ichemo, error, kcell, idrug
+real(REAL_KIND) :: tgrowth(MAX_CELLTYPES)
+type(cycle_parameters_type),pointer :: ccp
 
 ok = .true.
 initialized = .false.
 par_zig_init = .false.
+colony_simulation = .false.
 
 inputfile = infile
 outputfile = outfile
@@ -92,6 +95,17 @@ call logger('did ArrayInitialisation')
 
 call SetupChemo
 
+! New cell cycle formulation - need a value for max (unconstrained) growth rate
+use_volume_method = .not.use_cell_cycle
+if (use_cell_cycle .and. .not.use_volume_based_transition) then
+    use_constant_growthrate = .true.
+endif
+! Growth occurs during G1, S and G2, not in checkpoints
+ccp => cc_parameters
+tgrowth = ccp%T_G1 + ccp%T_S + ccp%T_G2
+max_growthrate = Vdivide0/(2*tgrowth)
+write(nflog,*) 'Vdivide0, max_growthrate: ',Vdivide0, max_growthrate
+
 !is_dropped = .false.
 !adrop = 1
 !bdrop = 1
@@ -125,6 +139,11 @@ Nradiation_dead = 0
 Ndrug_dead = 0
 Nanoxia_dead = 0
 Naglucosia_dead = 0
+
+ndoublings = 0
+doubling_time_sum = 0
+ncells_mphase = 0
+
 !radiation_dosed = .false.
 t_simulation = 0
 total_dMdt = 0
@@ -151,8 +170,8 @@ write(nfout,'(a,L)') 'use_V_dependence: ',use_V_dependence
 Vsum = 0
 Vdivsum = 0
 do kcell = 1,nlist
-	write(nfout,'(i6,2f6.2)') kcell,cell_list(kcell)%volume, cell_list(kcell)%divide_volume
-	Vsum = Vsum + cell_list(kcell)%volume
+	write(nfout,'(i6,2f6.2)') kcell,cell_list(kcell)%V, cell_list(kcell)%divide_volume
+	Vsum = Vsum + cell_list(kcell)%V
 	Vdivsum = Vdivsum + cell_list(kcell)%divide_volume
 enddo
 write(nfout,*)
@@ -312,12 +331,13 @@ integer :: i, idrug, imetab, nmetab, im, itestcase, Nmm3, ichemo, itreatment, iu
 integer :: iuse_oxygen, iuse_glucose, iuse_tracer, iuse_drug, iuse_metab, iV_depend, iV_random, iuse_gd_all
 !integer ::  idrug_decay, imetab_decay
 integer :: ictype, idisplay, isconstant, ioxygengrowth, iglucosegrowth, ioxygendeath, iglucosedeath
-integer :: iuse_drop, iconstant, isaveprofiledata, isaveslicedata
+integer :: iuse_drop, iconstant, isaveprofiledata, isaveslicedata, iusecellcycle
 logical :: use_metabolites
 real(REAL_KIND) :: days, bdry_conc, percent, d_n_limit
 real(REAL_KIND) :: sigma(2), DXmm, anoxia_tag_hours, anoxia_death_hours, aglucosia_tag_hours, aglucosia_death_hours
 character*(12) :: drug_name
 character*(1) :: numstr
+type(cycle_parameters_type),pointer :: ccp
 
 ok = .true.
 chemo(:)%used = .false.
@@ -452,6 +472,10 @@ read(nfcell,*) LQ(2)%growth_delay_factor
 read(nfcell,*) LQ(2)%growth_delay_N
 read(nfcell,*) iuse_gd_all
 use_radiation_growth_delay_all = (iuse_gd_all == 1)
+read(nfcell,*) iusecellcycle
+use_cell_cycle = (iusecellcycle == 1)
+ccp => cc_parameters
+call ReadCellCycleParameters(nfcell,ccp)
 read(nfcell,*) O2cutoff(1)
 read(nfcell,*) O2cutoff(2)
 read(nfcell,*) O2cutoff(3)
@@ -520,6 +544,9 @@ if (.not.chemo(GLUCOSE)%used) then
     chemo(GLUCOSE)%controls_growth = .false.
     chemo(GLUCOSE)%controls_death = .false.
 endif
+
+mitosis_duration = ccp%T_M(1)  ! seconds
+
 LQ(:)%growth_delay_factor = 60*60*LQ(:)%growth_delay_factor	! hours -> seconds
 divide_dist(1:2)%class = LOGNORMAL_DIST
 divide_time_median(1:2) = 60*60*divide_time_median(1:2)			! hours -> seconds
@@ -540,16 +567,8 @@ t_anoxia_limit = 60*60*anoxia_tag_hours				! hours -> seconds
 anoxia_death_delay = 60*60*anoxia_death_hours		! hours -> seconds
 t_aglucosia_limit = 60*60*aglucosia_tag_hours		! hours -> seconds
 aglucosia_death_delay = 60*60*aglucosia_death_hours	! hours -> seconds
-!Vextra_cm3 = fluid_fraction*Vsite_cm3				! extracellular volume in a site (cm^3)
-!cell_radius = (3*(1-fluid_fraction)*Vsite_cm3/(4*PI))**(1./3.)
-! In a well-oxygenated tumour the average cell fractional volume is intermediate between vdivide0/2 and vdivide0.
-! We assume that 0.75*vdivide0*Vcell_cm3 = (1 - fluid_fraction)*Vsite_cm3
-!Vcell_cm3 = (1 - fluid_fraction)*Vsite_cm3/(0.75*vdivide0)	! nominal cell volume in cm^3 (corresponds to %volume = 1)
-															! fractional volume: cell%volume = (cell volume in cm^3)/Vcell_cm3, 
-															! actual volume (cm^3) = Vcell_cm3*cell%volume
-!Vcell_pL = 1.0e9*Vcell_Cm3									! nominal cell volume in pL
-															! actual volume (pL) = Vcell_pL*cell%volume
 Vcell_cm3 = 1.0e-9*Vcell_pL									! nominal cell volume in cm3
+Vdivide0 = Vdivide0*Vcell_cm3
 total_volume = medium_volume0
 
 !write(logmsg,'(a,3e12.4)') 'DELTA_X, cell_radius: ',DELTA_X,cell_radius
@@ -613,6 +632,53 @@ call DetermineKd	! Kd is now set or computed in the GUI
 ok = .true.
 
 end subroutine
+
+!-----------------------------------------------------------------------------------------
+! The cell cycle parameters include the parameters for radiation damage and repair, 
+! and for the associated checkpoint duration limits Tcp(:).
+! Time unit = hour
+!-----------------------------------------------------------------------------------------
+subroutine ReadCellCycleParameters(nf, ccp)
+integer :: nf
+type(cycle_parameters_type),pointer :: ccp
+
+read(nf,*) ccp%T_G1(1)
+read(nf,*) ccp%T_G1(2)
+read(nf,*) ccp%T_S(1)
+read(nf,*) ccp%T_S(2)
+read(nf,*) ccp%T_G2(1)
+read(nf,*) ccp%T_G2(2)
+read(nf,*) ccp%T_M(1)
+read(nf,*) ccp%T_M(2)
+read(nf,*) ccp%G1_mean_delay(1)
+read(nf,*) ccp%G1_mean_delay(2)
+read(nf,*) ccp%G2_mean_delay(1)
+read(nf,*) ccp%G2_mean_delay(2)
+read(nf,*) ccp%eta_PL
+read(nf,*) ccp%eta_L(1)
+read(nf,*) ccp%eta_L(2)
+!read(nf,*) ccp%eta_L(3)
+read(nf,*) ccp%Krepair_base
+read(nf,*) ccp%Krepair_max
+read(nf,*) ccp%Kmisrepair(1)
+read(nf,*) ccp%Kmisrepair(2)
+!read(nf,*) ccp%Kmisrepair(3)
+read(nf,*) ccp%Kcp
+
+ccp%T_G1 = 3600*ccp%T_G1                    ! hours -> seconds
+ccp%T_S = 3600*ccp%T_S
+ccp%T_G2 = 3600*ccp%T_G2
+ccp%T_M = 3600*ccp%T_M
+ccp%G1_mean_delay = 3600*ccp%G1_mean_delay
+ccp%G2_mean_delay = 3600*ccp%G2_mean_delay
+
+ccp%Pk_G1 = 1./ccp%G1_mean_delay    ! /sec
+ccp%Pk_G2 = 1./ccp%G2_mean_delay    ! /sec
+call logger('makeTCP')
+call makeTCP(ccp%tcp,NTCP,ccp%Krepair_base,ccp%Kmisrepair,ccp%Kcp) ! set checkpoint repair time limits 
+call logger('did makeTCP')
+end subroutine
+
 
 !-----------------------------------------------------------------------------------------
 !-----------------------------------------------------------------------------------------
@@ -920,6 +986,7 @@ end subroutine
 subroutine PlaceCells(ok)
 logical :: ok
 integer :: kcell, k, ichemo, ityp, site(3)
+real(REAL_KIND) :: rsite(3)
 
 lastID = 0
 kcell = 0
@@ -936,9 +1003,9 @@ Ncells_type = 0
 !	kcell = initial_count
 !endif
 
-site = [0,0,0]
+rsite = [0.,0.,0.]
 do kcell = 1,initial_count
-	call AddCell(kcell,site)
+	call AddCell(kcell,rsite)
 enddo
 nlist = kcell-1
 Ncells = nlist
@@ -951,7 +1018,114 @@ end subroutine
 
 !--------------------------------------------------------------------------------
 !--------------------------------------------------------------------------------
-subroutine AddCell(k,site)
+subroutine AddCell(kcell, rsite)
+integer :: kcell
+real(REAL_KIND) :: rsite(3)
+integer :: ityp, k, kpar = 0
+real(REAL_KIND) :: v(3), c(3), R1, R2, V0, Tdiv, Vdiv, p(3), R
+type(cell_type), pointer :: cp
+type(cycle_parameters_type),pointer :: ccp
+	
+cp => cell_list(kcell)
+ccp => cc_parameters
+cp%ID = kcell
+cp%state = ALIVE
+cp%generation = 1
+cp%celltype = random_choice(celltype_fraction,Ncelltypes,kpar)
+ityp = cp%celltype
+Ncells_type(ityp) = Ncells_type(ityp) + 1
+cp%Iphase = .true.
+!cp%nspheres = 1
+
+V0 = Vdivide0/2
+if (use_volume_method) then
+    cp%divide_volume = get_divide_volume(ityp, V0, Tdiv)
+    cp%divide_time = Tdiv
+    !cp%divide_volume = Vdivide0
+    if (initial_count == 1) then
+	    cp%V = 0.9*cp%divide_volume
+    else
+    !	cp%V = (0.5 + 0.49*par_uni(kpar))*cp%divide_volume
+        if (randomise_initial_volume) then
+	        cp%V = cp%divide_volume*0.5*(1 + par_uni(kpar))
+        else
+	        cp%V = cp%divide_volume/1.6
+        endif
+    endif
+    cp%t_divide_last = 0    ! not correct
+else
+    cp%NL1 = 0
+    cp%NL2 = 0
+    ! Need to assign phase, volume to complete phase, current volume
+    ! Simplest way to assign phase fractions is in proportion to phase durations
+    ! (exclude M-phase)
+    p(1) = ccp%T_G1(ityp)
+    p(2) = ccp%T_S(ityp)
+    p(3) = ccp%T_G2(ityp)
+    p = p/sum(p)
+    k = random_choice(p,3,kpar)
+    if (k == 1) then
+        cp%phase = G1_phase
+        cp%G1_flag = .false.
+        R = par_uni(kpar)
+        cp%G1_time = R*ccp%T_G1(ityp)
+        cp%V = V0 + max_growthrate(ityp)*R*ccp%T_G1(ityp)
+        cp%G1_V = V0 + max_growthrate(ityp)*ccp%T_G1(ityp)
+        cp%t_divide_last = cp%G1_time - ccp%T_G1(ityp)
+    elseif (k == 2) then
+        cp%phase = S_phase
+        R = par_uni(kpar)
+        cp%S_time = R*ccp%T_S    (ityp)
+        cp%V = V0 + max_growthrate(ityp)*(ccp%T_G1(ityp) + R*ccp%T_S(ityp))
+        cp%S_V = V0 + max_growthrate(ityp)*(ccp%T_G1(ityp) + ccp%T_S(ityp))
+        cp%t_divide_last = cp%S_time - ccp%T_S(ityp) - ccp%T_G1(ityp) - ccp%G1_mean_delay(ityp)
+    elseif (k == 3) then
+        cp%phase = G2_phase
+        R = par_uni(kpar)
+        cp%G2_time = R*ccp%T_G2(ityp)
+        cp%V = V0 + max_growthrate(ityp)*(ccp%T_G1(ityp) + ccp%T_S(ityp) + R*ccp%T_G2(ityp))
+        cp%S_V = V0 + max_growthrate(ityp)*(ccp%T_G1(ityp) + ccp%T_S(ityp) + ccp%T_G2(ityp))
+        cp%t_divide_last = cp%G2_time - ccp%T_G2(ityp) - ccp%T_S(ityp) - ccp%T_G1(ityp) - ccp%G1_mean_delay(ityp)
+    endif
+    cp%starved = .false.
+endif
+!cp%radius(1) = (3*cp%V/(4*PI))**(1./3.)
+!cp%centre(:,1) = rsite
+!cp%site = rsite/DELTA_X + 1
+!cp%d = 0
+!cp%birthtime = 0
+!cp%growthrate = test_growthrate
+!cp2%divide_volume = get_divide_volume()
+!cp%d_divide = (3*cp%divide_volume/PI)**(1./3.)
+!cp%mitosis = 0
+
+cp%drug_tag = .false.
+cp%radiation_tag = .false.
+cp%anoxia_tag = .false.
+cp%aglucosia_tag = .false.
+cp%growth_delay = .false.
+cp%G2_M = .false.
+cp%p_rad_death = 0
+
+cp%t_anoxia = 0
+cp%t_aglucosia = 0
+
+call get_random_vector3(v)	! set initial axis direction
+!cp%d = 0.1*small_d
+!c = cp%centre(:,1)
+!cp%centre(:,1) = c + (cp%d/2)*v
+!cp%centre(:,2) = c - (cp%d/2)*v
+!cp%nbrs = 0
+!cp%Cex = Caverage(1,1,1,:)	! initially the concentrations are the same everywhere
+!cp%Cin = cp%Cex
+cp%CFSE = generate_CFSE(1.d0)
+
+!cp%ndt = ndt
+end subroutine
+
+!--------------------------------------------------------------------------------
+!--------------------------------------------------------------------------------
+subroutine oldAddCell(k,site)
 integer :: k, site(3)
 integer :: ityp, kpar = 0
 real(REAL_KIND) :: V0, Tdiv, R
@@ -970,7 +1144,7 @@ cell_list(k)%drug_tag = .false.
 cell_list(k)%radiation_tag = .false.
 cell_list(k)%anoxia_tag = .false.
 cell_list(k)%aglucosia_tag = .false.
-cell_list(k)%exists = .true.
+!cell_list(k)%exists = .true.
 cell_list(k)%active = .true.
 cell_list(k)%growth_delay = .false.
 cell_list(k)%G2_M = .false.
@@ -982,17 +1156,17 @@ cell_list(k)%divide_volume = get_divide_volume(ityp,V0, Tdiv)
 cell_list(k)%divide_time = Tdiv
 R = par_uni(kpar)
 if (randomise_initial_volume) then
-	cell_list(k)%volume = cell_list(k)%divide_volume*0.5*(1 + R)
+	cell_list(k)%V = cell_list(k)%divide_volume*0.5*(1 + R)
 else
-	cell_list(k)%volume = 1.0
+	cell_list(k)%V = 1.0*Vcell_cm3
 endif
-!write(nflog,'(a,i6,f6.2)') 'volume: ',k,cell_list(k)%volume
+!write(nflog,'(a,i6,f6.2)') 'volume: ',k,cell_list(k)%V
 cell_list(k)%t_divide_last = 0		! used in colony growth
 cell_list(k)%t_anoxia = 0
-cell_list(k)%conc = 0
-cell_list(k)%conc(OXYGEN) = chemo(OXYGEN)%bdry_conc
-cell_list(k)%conc(GLUCOSE) = chemo(GLUCOSE)%bdry_conc
-cell_list(k)%conc(TRACER) = chemo(TRACER)%bdry_conc
+cell_list(k)%Cin = 0
+cell_list(k)%Cin(OXYGEN) = chemo(OXYGEN)%bdry_conc
+cell_list(k)%Cin(GLUCOSE) = chemo(GLUCOSE)%bdry_conc
+cell_list(k)%Cin(TRACER) = chemo(TRACER)%bdry_conc
 cell_list(k)%CFSE = generate_CFSE(1.d0)
 cell_list(k)%M = 0
 !occupancy(site(1),site(2),site(3))%indx(1) = k
@@ -1316,8 +1490,7 @@ nthour = 3600/DELTA_T
 dt = DELTA_T/NT_CONC
 
 if (istep == -100) then
-	tnow = istep*DELTA_T
-	call make_colony_distribution(tnow)
+!	call make_colony_distribution()
 	stop
 endif
 
@@ -1389,7 +1562,7 @@ type(cell_type), pointer :: cp
 
 cp => cell_list(kcell)
 write(nflog,'(a,i6,4e12.3)') 'kcell, volume, divide_volume, dVdt, divide_time: ', &
-                kcell, cp%volume, cp%divide_volume, cp%dVdt, cp%divide_time
+                kcell, cp%V, cp%divide_volume, cp%dVdt, cp%divide_time
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -1411,7 +1584,7 @@ do kcell = 1,nlist
     cp => cell_list(kcell)
     if (cp%state == DEAD) cycle
     n = n+1
-    Vsum = Vsum + cp%volume
+    Vsum = Vsum + cp%V
     divVsum = divVsum + cp%divide_volume
     dVdtsum = dVdtsum + cp%dVdt
     divtsum = divtsum + cp%divide_time

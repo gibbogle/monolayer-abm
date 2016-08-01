@@ -17,13 +17,64 @@ void MainWindow::setupPopup()
     connect(pushButton_drugKF_0,SIGNAL(clicked()),this,SLOT(pushButton_clicked()));
     connect(pushButton_drugSF_0,SIGNAL(clicked()),this,SLOT(pushButton_clicked()));
     connect(pushButton_complementarySF_0,SIGNAL(clicked()),this,SLOT(pushButton_clicked()));
+
+    connect(pushButton_colony,SIGNAL(clicked()),this,SLOT(pushButton_colony_clicked()));
+}
+
+//--------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------
+void MainWindow::pushButton_colony_clicked()
+{
+    int HMI_SCALE = 1;
+    QString plotName;
+
+    if (!checkBox_colony->isChecked()) return;
+    plotwin = new PlotWin(this);
+    QWidget *cw = plotwin->centralWidget();
+    QFrame *plotFrame = cw->findChild<QFrame *>("plotFrame");
+    colony_plot = new QCustomPlot(plotFrame);
+    connect(colony_plot, SIGNAL(mousePress(QMouseEvent*)), SLOT(clickedGraph(QMouseEvent*)));
+    colony_plot->setObjectName("popup_plot");
+    colony_plot->setGeometry(QRect(5*HMI_SCALE, 5*HMI_SCALE, 660*HMI_SCALE, 380*HMI_SCALE));
+    plotName = "Colony size distribution";
+    plotwin->setWindowTitle(plotName);
+
+    int n = Global::ndist;
+    double dx = Global::ddist;
+    QVector<double> x0(n), y0(n);
+    double ymax = 0;
+    for (int i=0; i<n; i++) {
+        x0[i] = (i+0.5)*dx;
+        y0[i] = Global::dist[i];
+        ymax = max(ymax,y0[i]);
+    }
+    if (ymax == 0) return;
+    // create graph and assign data to it:
+    colony_plot->addGraph();
+    colony_plot->graph(0)->setData(x0, y0);
+    colony_plot->graph(0)->setPen(QPen(Qt::blue));
+    // give the axes some labels:
+    colony_plot->xAxis->setLabel("# of cells");
+    colony_plot->yAxis->setLabel("Probability");
+    // set axes ranges
+    colony_plot->xAxis->setAutoTickStep(false);
+    colony_plot->xAxis->setTickStep(4*dx);
+    colony_plot->xAxis->setRange(0, n*dx);
+    colony_plot->yAxis->setAutoTickStep(true);
+    colony_plot->yAxis->setTickStep(0.01);
+    int i;
+    for (i=1; i<20; i++) {
+        if (ymax < i*0.05) break;
+    }
+    colony_plot->yAxis->setRange(0, i*0.05);
+
+    plotwin->show();
 }
 
 //--------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------
 void MainWindow::pushButton_clicked()
 {
-
     int HMI_SCALE = 1;
     int cellType;
     QString title, plotType, plotName;

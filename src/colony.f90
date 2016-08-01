@@ -3,11 +3,11 @@
 module colony
 
 use global
+use cellstate
 implicit none
 
 integer, parameter :: n_colony_days=10
 integer :: nmax
-type(cell_type), target, allocatable :: ccell_list(:)
 
 contains
 
@@ -28,150 +28,132 @@ contains
 ! V0 = volume*Vcell_cm3
 ! and
 ! divide_volume = Vdivide0 + dVdivide*(2*R-1)
-
+! The new method simply continues the simulation from where it ended, for 10 days.
 !---------------------------------------------------------------------------------------------------
-subroutine make_colony_distribution(tnow)
-real(REAL_KIND) :: tnow
+subroutine make_colony_distribution(dist,ddist,ndist) bind(C)
+!DEC$ ATTRIBUTES DLLEXPORT :: make_colony_distribution
+use, intrinsic :: iso_c_binding
+real(c_double) :: dist(*), ddist
+integer(c_int) :: ndist
 real(REAL_KIND) :: V0, dVdt, dt, t, tend
-integer, parameter :: ndist=40
-real(REAL_KIND) :: ddist, dist(ndist)
-integer :: kcell, ityp, n, idist, ncycmax, ntot
+!integer, parameter :: ndist=40
+!real(REAL_KIND) :: ddist, dist(ndist)
+real(REAL_KIND) :: tnow_save
+integer :: kcell, ityp, n, idist, ncycmax, ntot, nlist_save
 type (cell_type), pointer :: cp
 
-write(*,*) 'make_colony_distribution: nlist: ',nlist
+write(logmsg,*) 'make_colony_distribution: nlist: ',nlist
+call logger(logmsg)
+colony_simulation = .true.
+nlist_save = nlist
+tnow_save = tnow
 ncycmax = 24*3600*n_colony_days/divide_time_mean(1) + 3
 nmax = 2**ncycmax
 allocate(ccell_list(nmax))
 ddist = 50
-dist = 0
+dist(1:ndist) = 0
 ntot = 0
-tend = tnow + 10*24*3600
-do kcell = 1, nlist
+tend = tnow + n_colony_days*24*3600    ! plate for 10 days
+do kcell = 1, nlist_save
 	cp => cell_list(kcell)
 	if (cp%state == DEAD) cycle
 	ityp = cp%celltype
-	if (.not.cp%G2_M) then
-		! approximate time to reach divide volume
-!		V0 = cp%volume*Vcell_cm3
-		if (use_divide_time_distribution) then
-			cp%divide_volume = Vdivide0
-		endif
-		V0 = cp%volume	!!!!!!!!!!!!!!
-		dt = ((cp%divide_volume - V0)/cp%divide_volume)*divide_time_mean(ityp)
-	else
-		dt = 0
+	
+	! Now simulate colony growth from a single cell
+	tnow = tnow_save
+	call make_colony(kcell,tend,n)
+	if (mod(kcell,100) == 0) then
+	    write(logmsg,*) 'cell: n: ',kcell,n
+	    call logger(logmsg)
 	endif
-	t = tnow + dt
-!	cp%volume = cp%divide_volume/Vcell_mm3
-	cp%volume = cp%divide_volume	!!!!!!!!!!!
-	! Now simulate colony growth
-	call make_colony(kcell,t,tend,n)
-	write(*,*) 'cell: n: ',kcell,n
 	ntot = ntot + n
 	idist = n/ddist + 1
 	dist(idist) = dist(idist) + 1
-enddo
-dist = dist/sum(dist)
-write(*,*) 'Colony size distribution: ', nlist,ntot
-write(nfout,*) 'Colony size distribution: ', nlist,ntot
+enddo 
+dist(1:ndist) = dist(1:ndist)/sum(dist(1:ndist))
+write(logmsg,'(a,2i8,f8.1)') 'Colony size distribution: ', nlist_save,ntot,real(ntot)/nlist_save
+call logger(logmsg)
+write(nfout,'(a,2i8,f8.1)') 'Colony size distribution: ', nlist_save,ntot,real(ntot)/nlist_save
 do idist = 1,ndist
-	write(*,'(i4,a,i4,f6.3)') int((idist-1)*ddist),'-',int(idist*ddist),dist(idist)
+	write(logmsg,'(i4,a,i4,f6.3)') int((idist-1)*ddist),'-',int(idist*ddist),dist(idist)
+    call logger(logmsg)
 	write(nfout,'(i4,a,i4,f6.3)') int((idist-1)*ddist),'-',int(idist*ddist),dist(idist)
 enddo
 deallocate(ccell_list)
+colony_simulation = .false.
+nlist = nlist_save
+tnow = tnow_save
 end subroutine
+
+!!---------------------------------------------------------------------------------------------------
+!!---------------------------------------------------------------------------------------------------
+!subroutine simulate_cell_colony(kcell, n) bind(C)
+!type (cell_type), pointer :: cp
+!cp => cell_list(kcell)
+!if (cp%state == DEAD) cycle
+!ityp = cp%celltype
+!
+!! Now simulate colony growth from a single cell
+!tnow = tnow_save
+!call make_colony(kcell,tend,n)
+!end subroutine
+!
+!!---------------------------------------------------------------------------------------------------
+!subroutine close_make_colony_distribution() bind(C)
+!!DEC$ ATTRIBUTES DLLEXPORT :: close_make_colony_distribution
+!
+!end subroutine
 
 !---------------------------------------------------------------------------------------------------
 ! The cell is at the point of division - possibly G2_M (arrested at G2/M checkpoint)
 ! For now only radiation tagging is handled
 ! Growth rate dVdt (mean) is used only to estimate the time of next division
 !---------------------------------------------------------------------------------------------------
-subroutine make_colony(kcell,t,tend,n)
+subroutine make_colony(kcell,tend,n)
 integer :: kcell, n
-real(REAL_KIND) :: t, tend, dt 
-integer :: icell, ityp, nl, nl0, kpar=0
+real(REAL_KIND) :: tend, dt 
+integer :: icell, ityp, nlist0, kpar=0
 real(REAL_KIND) :: V0, Tdiv0, r_mean, c_rate, dVdt, Tmean, R
-logical :: ok
+logical :: changed, ok
 type (cell_type), pointer :: cp
 
-!write(*,'(a,i6,2f8.0)') 'make_colony: ',kcell,t,tend
+!write(*,'(a,i6,2f8.0)') 'make_colony: ',kcell,tnow,tend
 ccell_list(1) = cell_list(kcell)
 ccell_list(1)%anoxia_tag = .false.
 ccell_list(1)%aglucosia_tag = .false.
 ccell_list(1)%drug_tag = .false.
-dt = 3600	! use big time steps, 1h
+!dt = 3600	! use big time steps, 1h
+dt = DELTA_T
 ityp = cell_list(kcell)%celltype
 Tdiv0 = divide_time_mean(ityp)
 r_mean = Vdivide0/Tdiv0
 c_rate = log(2.0)/Tdiv0
-ccell_list(1)%volume = cell_list(kcell)%divide_volume
-ccell_list(1)%t_divide_next = t
-nl = 1
-do while (t < tend)
-	t = t + dt
-	nl0 = nl
-	do icell = 1,nl0
-		cp => ccell_list(icell)
-		if (cp%state == DEAD) cycle
-		if (t >= cp%t_divide_next) then
-!			if (kcell == nlist) write(*,*) 't_divide_next: ',icell,cp%t_divide_next
-			! Time to divide, unless delayed
-			if (cp%growth_delay) then
-				if (cp%G2_M) then
-					if (t > cp%t_growth_delay_end) then
-						cp%G2_M = .false.
-					else
-						cycle
-					endif
-				else
-					cp%t_growth_delay_end = t + cp%dt_delay
-					cp%G2_M = .true.
-					cycle
-				endif
-			endif
-			if (cp%radiation_tag) then
-				R = par_uni(kpar)
-				if (R < cp%p_rad_death) then
-					! Cell dies
-					cp%state = DEAD
-					cycle
-				endif
-			endif
-			! Can divide
-!			write(*,*) 'divides: ',icell
-			nl = nl+1
-			if (nl > nmax) then
-				write(*,*) 'nmax exceeded: ',nmax
-				stop
-			endif
-			call CloneColonyCell(icell,nl,t,ok)
-		endif
-		if (use_V_dependence) then
-			dVdt = c_rate*cp%volume
-		else
-			dVdt = r_mean
-		endif
-		cp%volume = cp%volume + dt*dVdt
-	enddo
+!ccell_list(1)%V = cell_list(kcell)%divide_volume
+!ccell_list(1)%t_divide_next = tnow
+
+nlist = 1
+do while (tnow < tend)
+	tnow = tnow + dt
+    call grower(dt,changed,ok)
 enddo
 n = 0
-do icell = 1,nl
+do icell = 1,nlist
 	if (ccell_list(icell)%state /= DEAD) n = n+1
 enddo
 end subroutine
 
 !-----------------------------------------------------------------------------------------
 !-----------------------------------------------------------------------------------------
-subroutine CloneColonyCell(kcell0,kcell1,tnow,ok)
+subroutine CloneColonyCell(kcell0,kcell1,ok)
 integer :: kcell0, kcell1, ityp, idrug
 logical :: ok
 integer :: kpar = 0
-real(REAL_KIND) :: tnow, R, Tdiv, Tdiv0
+real(REAL_KIND) :: R, Tdiv, Tdiv0
 
 ok = .true.
 ityp = ccell_list(kcell0)%celltype
 Tdiv0 = divide_time_mean(ityp)
-ccell_list(kcell0)%volume = ccell_list(kcell0)%volume/2
+ccell_list(kcell0)%V = ccell_list(kcell0)%V/2
 ccell_list(kcell0)%generation = ccell_list(kcell0)%generation + 1
 if (ccell_list(kcell0)%growth_delay) then
 	ccell_list(kcell0)%N_delayed_cycles_left = ccell_list(kcell0)%N_delayed_cycles_left - 1
@@ -189,7 +171,7 @@ endif
 !write(*,*) 'divide time: ',Tdiv0*(1 + (2*dVdivide/Vdivide0)*(2*R-1))/3600
 ccell_list(kcell1)%celltype = ccell_list(kcell0)%celltype
 ccell_list(kcell1)%state = ccell_list(kcell0)%state
-ccell_list(kcell1)%volume = ccell_list(kcell0)%volume
+ccell_list(kcell1)%V = ccell_list(kcell0)%V
 ccell_list(kcell1)%generation = ccell_list(kcell0)%generation
 ccell_list(kcell1)%ID = ccell_list(kcell0)%ID
 ccell_list(kcell1)%p_rad_death = ccell_list(kcell0)%p_rad_death
@@ -197,7 +179,7 @@ ccell_list(kcell1)%p_drug_death = ccell_list(kcell0)%p_drug_death
 ccell_list(kcell1)%radiation_tag = ccell_list(kcell0)%radiation_tag
 ccell_list(kcell1)%anoxia_tag = .false.
 ccell_list(kcell1)%aglucosia_tag = .false.
-ccell_list(kcell1)%exists = .true.
+!ccell_list(kcell1)%exists = .true.
 ccell_list(kcell1)%active = .true.
 ccell_list(kcell1)%growth_delay = ccell_list(kcell0)%growth_delay
 if (ccell_list(kcell1)%growth_delay) then
@@ -215,7 +197,7 @@ else
 endif
 ccell_list(kcell1)%t_anoxia = 0
 ccell_list(kcell1)%t_aglucosia = 0
-ccell_list(kcell1)%conc = ccell_list(kcell0)%conc
+ccell_list(kcell1)%Cin = ccell_list(kcell0)%Cin
 !ccell_list(kcell1)%Cex = ccell_list(kcell0)%Cex
 ccell_list(kcell1)%dCdt = ccell_list(kcell0)%dCdt
 ccell_list(kcell1)%dMdt = ccell_list(kcell0)%dMdt
