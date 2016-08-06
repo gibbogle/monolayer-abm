@@ -69,9 +69,7 @@ real(REAL_KIND) :: dose
 logical :: ok
 integer :: kcell, site(3), iv, ityp, idrug, im, ichemo, kpar=0
 real(REAL_KIND) :: C_O2, SER, p_death, p_recovery, R, kill_prob, tmin
-real(REAL_KIND) :: Cs							! concentration of radiosensitising drug
-real(REAL_KIND) :: SER_max0, SER_Km, SER_KO2	! SER parameters of the drug
-real(REAL_KIND) :: SERmax						! max sensitisation at the drug concentration
+real(REAL_KIND) :: SER_OER(2)
 type(cell_type), pointer :: cp
 type(cycle_parameters_type), pointer :: ccp
 
@@ -87,25 +85,14 @@ if (use_volume_method) then
         endif
 	    if (cp%state == DEAD) cycle
 	    if (cp%radiation_tag) cycle	! we do not tag twice (yet)
-	    ityp = cp%celltype
 	    call getO2conc(cp,C_O2)
 	    ! Compute sensitisation SER
-	    SER = 1.0
-	    do idrug = 1,Ndrugs_used
-		    ichemo = 4 + 3*(idrug-1)
-		    if (.not.chemo(ichemo)%present) cycle
-		    do im = 0,2
-			    ichemo = 4 + 3*(idrug-1) + im
-			    if (drug(idrug)%sensitises(ityp,im)) then
-				    Cs = cp%Cin(ichemo)	! concentration of drug/metabolite in the cell
-				    SER_max0 = drug(idrug)%SER_max(ityp,im)
-				    SER_Km = drug(idrug)%SER_Km(ityp,im)
-				    SER_KO2 = drug(idrug)%SER_KO2(ityp,im)
-				    SERmax = (Cs*SER_max0 + SER_Km)/(Cs + SER_Km)
-				    SER = SER*(C_O2 + SER_KO2*SERmax)/(C_O2 + SER_KO2)
-			    endif
-		    enddo
-	    enddo
+	    if (Ndrugs_used > 0) then
+	        SER = getSER(cp,C_O2)
+	    else
+    	    SER = 1.0
+    	endif
+	    ityp = cp%celltype
 	    call get_kill_probs(ityp,dose,C_O2,SER,p_recovery,p_death)
 	    kill_prob = 1 - p_recovery
 	    R = par_uni(kpar)
@@ -138,30 +125,49 @@ else
             cp => cell_list(kcell)
         endif
 	    if (cp%state == DEAD) cycle
-	    ityp = cp%celltype
 	    call getO2conc(cp,C_O2)
 	    ! Compute sensitisation SER
-	    SER = 1.0
-	    do idrug = 1,Ndrugs_used
-		    ichemo = 4 + 3*(idrug-1)
-		    if (.not.chemo(ichemo)%present) cycle
-		    do im = 0,2
-			    ichemo = 4 + 3*(idrug-1) + im
-			    if (drug(idrug)%sensitises(ityp,im)) then
-				    Cs = cp%Cin(ichemo)	! concentration of drug/metabolite in the cell
-				    SER_max0 = drug(idrug)%SER_max(ityp,im)
-				    SER_Km = drug(idrug)%SER_Km(ityp,im)
-				    SER_KO2 = drug(idrug)%SER_KO2(ityp,im)
-				    SERmax = (Cs*SER_max0 + SER_Km)/(Cs + SER_Km)
-				    SER = SER*(C_O2 + SER_KO2*SERmax)/(C_O2 + SER_KO2)
-			    endif
-		    enddo
-	    enddo
-        call radiation_damage(cp, ccp, dose, SER, tmin)
+	    if (Ndrugs_used > 0) then
+	        SER = getSER(cp,C_O2)
+	    else
+    	    SER = 1.0
+    	endif
+        SER_OER(1) = SER*(LQ(ityp)%OER_am*C_O2 + LQ(ityp)%K_ms)/(C_O2 + LQ(ityp)%K_ms)      ! OER_alpha
+        SER_OER(2) = SER*(LQ(ityp)%OER_bm*C_O2 + LQ(ityp)%K_ms)/(C_O2 + LQ(ityp)%K_ms)      ! OER_beta
+        call radiation_damage(cp, ccp, dose, SER_OER, tmin)
     enddo
 endif
 call logger('did Irradiation')
 end subroutine
+
+!-----------------------------------------------------------------------------------------
+!-----------------------------------------------------------------------------------------
+function getSER(cp,C_O2) result(SER)
+type(cell_type), pointer :: cp
+real(REAL_KIND) ::C_O2, SER
+real(REAL_KIND) :: Cs							! concentration of radiosensitising drug
+real(REAL_KIND) :: SER_max0, SER_Km, SER_KO2	! SER parameters of the drug
+real(REAL_KIND) :: SERmax						! max sensitisation at the drug concentration
+integer :: ityp, idrug, ichemo, im
+
+ityp = cp%celltype
+SER = 1.0
+do idrug = 1,Ndrugs_used
+    ichemo = 4 + 3*(idrug-1)
+    if (.not.chemo(ichemo)%present) cycle
+    do im = 0,2
+	    ichemo = 4 + 3*(idrug-1) + im
+	    if (drug(idrug)%sensitises(ityp,im)) then
+		    Cs = cp%Cin(ichemo)	! concentration of drug/metabolite in the cell
+		    SER_max0 = drug(idrug)%SER_max(ityp,im)
+		    SER_Km = drug(idrug)%SER_Km(ityp,im)
+		    SER_KO2 = drug(idrug)%SER_KO2(ityp,im)
+		    SERmax = (Cs*SER_max0 + SER_Km)/(Cs + SER_Km)
+		    SER = SER*(C_O2 + SER_KO2*SERmax)/(C_O2 + SER_KO2)
+	    endif
+    enddo
+enddo
+end function
 
 !-----------------------------------------------------------------------------------------
 ! A cell that receives a dose of radiation either recovers completely before reaching 
@@ -416,11 +422,9 @@ end subroutine
 subroutine test_CellDivision(ok)
 logical :: ok
 integer :: kcell, kpar=0
-type(cell_type), pointer :: cp
 
 kcell = random_int(1,nlist,kpar)
-cp => cell_list(kcell)
-call divider(cp,ok)
+call divider(kcell,ok)
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -564,7 +568,7 @@ do k = 1,ndivide
 	else
     	cp => cell_list(kcell)
     endif
-	call divider(cp, ok)
+	call divider(kcell, ok)
 	if (.not.ok) return
 enddo
 end subroutine
@@ -687,20 +691,23 @@ end function
 !-----------------------------------------------------------------------------------------
 ! New version
 !-----------------------------------------------------------------------------------------
-subroutine divider(cp1, ok)
-type(cell_type), pointer :: cp1
-!integer :: kcell1
+subroutine divider(kcell1, ok)
+integer :: kcell1
 logical :: ok
 integer :: kcell2, ityp, nbrs0
 real(REAL_KIND) :: r(3), c(3), cfse0, cfse2, V0, Tdiv
-type(cell_type), pointer :: cp2
+type(cell_type), pointer :: cp1, cp2
 
 !write(*,*) 'divider:'
 !write(logmsg,*) 'divider: ',kcell1 
 !call logger(logmsg)
 ok = .true.
 !tnow = istep*DELTA_T
-!cp1 => cell_list(kcell1)
+if (colony_simulation) then
+    cp1 => ccell_list(kcell1)
+else
+	cp1 => cell_list(kcell1)
+endif
 if (ngaps > 0) then
     kcell2 = gaplist(ngaps)
     ngaps = ngaps - 1

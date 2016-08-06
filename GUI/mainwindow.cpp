@@ -2718,7 +2718,7 @@ void MainWindow::changeParam()
                 bool ch = checkBox->isChecked();
                 groupBox_cellcycle->setEnabled(ch);
                 groupBox_radiation_RMR->setEnabled(ch);
-                groupBox_radiation_LQ->setEnabled(!ch);
+//                groupBox_radiation_LQ->setEnabled(!ch);
                 qwtPlot_DIVIDE_TIME_1->setEnabled(!ch);
                 qwtPlot_DIVIDE_TIME_2->setEnabled(!ch);
                 groupBox_volumemethod->setEnabled(!ch);
