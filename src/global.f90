@@ -370,11 +370,13 @@ logical :: use_volume_method
 logical :: use_cell_cycle
 logical :: use_constant_growthrate = .true. 
 logical :: randomise_initial_volume
+logical :: is_radiation
 !logical :: use_FD = .true.
 logical :: use_gaplist = .true.
 !logical :: relax
 logical :: use_parallel
 logical :: colony_simulation
+logical :: use_HIF1 = .false.
 logical :: dbug = .false.
 logical :: bdry_debug
 

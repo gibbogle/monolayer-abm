@@ -241,7 +241,7 @@ do kcell = 1,nlist
 	call getO2conc(cp,C_O2)
 	if (cp%anoxia_tag) then
 		if (tnow >= cp%t_anoxia_die) then
-			call CellDies(cp)
+			call CellDies(kcell)
 			Nanoxia_dead(ityp) = Nanoxia_dead(ityp) + 1
 			cycle
 		endif
@@ -263,7 +263,7 @@ do kcell = 1,nlist
 	call getGlucoseconc(cp,C_glucose)
 	if (cp%aglucosia_tag) then
 		if (tnow >= cp%t_aglucosia_die) then
-			call CellDies(cp)
+			call CellDies(kcell)
 			Naglucosia_dead(ityp) = Naglucosia_dead(ityp) + 1
 			cycle
 		endif
@@ -336,12 +336,10 @@ end subroutine
 !-----------------------------------------------------------------------------------------
 subroutine test_CellDies
 integer :: kcell, i, kpar=0
-type(cell_type), pointer :: cp
 
 do i = 1,10
 	kcell = random_int(1,nlist,kpar)
-	cp => cell_list(kcell)
-	call CellDies(cp)
+	call CellDies(kcell)
 enddo
 stop
 end subroutine
@@ -353,11 +351,12 @@ end subroutine
 ! If the site is on the boundary, it is removed from the boundary list, and %indx -> OUTSIDE_TAG
 ! The cell contents are released into the site.
 !-----------------------------------------------------------------------------------------
-subroutine CellDies(cp)
+subroutine CellDies(kcell)
 integer :: kcell
 integer :: site(3), ityp, idrug
 type(cell_type), pointer :: cp
 
+cp => cell_list(kcell)
 cp%state = DEAD
 ityp = cp%celltype
 Ncells = Ncells - 1
@@ -498,7 +497,7 @@ do kcell = 1,nlist0
 		drugkilled = .false.
 		do idrug = 1,ndrugs_used
 			if (cp%drug_tag(idrug)) then
-				call CellDies(cp)
+				call CellDies(kcell)
 				changed = .true.
 				Ndrug_dead(idrug,ityp) = Ndrug_dead(idrug,ityp) + 1
 				drugkilled = .true.
@@ -525,7 +524,7 @@ do kcell = 1,nlist0
 			if (cp%radiation_tag) then
 				R = par_uni(kpar)
 				if (R < cp%p_rad_death) then
-					call CellDies(cp)
+					call CellDies(kcell)
 					changed = .true.
 					Nradiation_dead(ityp) = Nradiation_dead(ityp) + 1
 					cycle
@@ -538,7 +537,7 @@ do kcell = 1,nlist0
 		    !   remaining L1 lesions and L2c misrepair (non-reciprocal translocation) are treated the same way
 		    !   L2a and L2b are treated as non-fatal
 		    if (cp%NL1 > 0 .or. cp%NL2(2) > 0) then
-				call CellDies(cp)
+				call CellDies(kcell)
 				changed = .true.
 				Nradiation_dead(ityp) = Nradiation_dead(ityp) + 1
 				cycle

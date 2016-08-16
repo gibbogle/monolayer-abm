@@ -7078,7 +7078,7 @@ padding: 8px
                </spacer>
               </item>
               <item row="5" column="2">
-               <widget class="QLineEdit" name="line_NMM3">
+               <widget class="QLineEdit" name="line_WELL_AREA">
                 <property name="maximumSize">
                  <size>
                   <width>50</width>
@@ -7194,7 +7194,7 @@ padding: 8px
                </spacer>
               </item>
               <item row="2" column="2">
-               <widget class="QLineEdit" name="line_DIAM_LIMIT">
+               <widget class="QLineEdit" name="line_VCELL_PL">
                 <property name="maximumSize">
                  <size>
                   <width>50</width>
@@ -8432,7 +8432,7 @@ padding: 8px
     <bool>true</bool>
    </property>
    <property name="icon">
-    <iconset resource="../../scell-development/GUI/icons.qrc">
+    <iconset resource="icons.qrc">
      <normaloff>:/icons/001_29.png</normaloff>:/icons/001_29.png</iconset>
    </property>
    <property name="text">
@@ -8447,7 +8447,7 @@ padding: 8px
   </action>
   <action name="action_run">
    <property name="icon">
-    <iconset resource="../../scell-development/GUI/icons.qrc">
+    <iconset resource="icons.qrc">
      <normaloff>:/icons/001_59.png</normaloff>:/icons/001_59.png</iconset>
    </property>
    <property name="text">
@@ -8459,7 +8459,7 @@ padding: 8px
   </action>
   <action name="action_inputs">
    <property name="icon">
-    <iconset resource="../../scell-development/GUI/icons.qrc">
+    <iconset resource="icons.qrc">
      <normaloff>:/icons/001_45.png</normaloff>:/icons/001_45.png</iconset>
    </property>
    <property name="text">
@@ -8471,7 +8471,7 @@ padding: 8px
   </action>
   <action name="action_outputs">
    <property name="icon">
-    <iconset resource="../../scell-development/GUI/icons.qrc">
+    <iconset resource="icons.qrc">
      <normaloff>:/icons/Display2.png</normaloff>:/icons/Display2.png</iconset>
    </property>
    <property name="text">
@@ -8486,7 +8486,7 @@ padding: 8px
     <bool>true</bool>
    </property>
    <property name="icon">
-    <iconset resource="../../scell-development/GUI/icons.qrc">
+    <iconset resource="icons.qrc">
      <normaloff>:/icons/cell2.png</normaloff>:/icons/cell2.png</iconset>
    </property>
    <property name="text">
@@ -8498,7 +8498,7 @@ padding: 8px
   </action>
   <action name="action_pause">
    <property name="icon">
-    <iconset resource="../../scell-development/GUI/icons.qrc">
+    <iconset resource="icons.qrc">
      <normaloff>:/icons/001_07.png</normaloff>:/icons/001_07.png</iconset>
    </property>
    <property name="text">
@@ -8583,7 +8583,7 @@ padding: 8px
   </action>
   <action name="action_field">
    <property name="icon">
-    <iconset resource="../../scell-development/GUI/icons.qrc">
+    <iconset resource="icons.qrc">
      <normaloff>:/icons/color.jpg</normaloff>:/icons/color.jpg</iconset>
    </property>
    <property name="text">
@@ -8600,7 +8600,7 @@ padding: 8px
   </action>
   <action name="action_FACS">
    <property name="icon">
-    <iconset resource="../../scell-development/GUI/icons.qrc">
+    <iconset resource="icons.qrc">
      <normaloff>:/icons/FACS_234.png</normaloff>:/icons/FACS_234.png</iconset>
    </property>
    <property name="text">
@@ -8684,7 +8684,9 @@ padding: 8px
   <tabstop>spin_SEED1</tabstop>
   <tabstop>spin_SEED2</tabstop>
  </tabstops>
- <resources/>
+ <resources>
+  <include location="icons.qrc"/>
+ </resources>
  <connections/>
  <buttongroups>
   <buttongroup name="buttonGroup_drugtype"/>

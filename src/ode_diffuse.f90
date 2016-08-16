@@ -56,7 +56,11 @@ do kcell = 1,nlist
 !	    if (cp%Cex(ichemo) > Cthreshold) drug_gt_cthreshold(idrug) = .true.
 	enddo
 enddo
-    
+do i = 1,ndrugs_present
+    ichemo = drug_present(i)
+    idrug = drug_number(i)
+    if (Caverage(MAX_CHEMO + ichemo) > Cthreshold) drug_gt_cthreshold(idrug) = .true.
+enddo
 end subroutine
 
 !----------------------------------------------------------------------------------
@@ -86,10 +90,11 @@ integer :: ic, ichemo, idrug, im, ict, Ng, ncvars
 real(REAL_KIND) :: dCsum, dCdiff, dCreact, vol_cm3, val, Cin(MAX_CHEMO), Cmedium(MAX_CHEMO), Cex
 real(REAL_KIND) :: decay_rate, C, membrane_kin, membrane_kout, membrane_flux, area_factor, n_O2(0:2)
 logical :: metabolised(MAX_CELLTYPES,0:2)
-real(REAL_KIND) :: metab, dMdt, KmetC, vcell_actual, Kd(0:2), dC, C0
+real(REAL_KIND) :: metab, cell_flux, dMdt, KmetC, vcell_actual, Kd(0:2), dC, C0
 type(drug_type), pointer :: dp
 real(REAL_KIND) :: average_volume = 1.2
 logical :: use_average_volume = .true.
+logical :: is_metab1
 
 if (use_average_volume) then
     vol_cm3 = Vcell_cm3*average_volume	  ! not accounting for cell volume change
@@ -118,6 +123,7 @@ do ic = 1,neqn
     if (ichemo == GLUCOSE) then
 	    Ng = chemo(GLUCOSE)%Hill_N
     endif
+    is_metab1 = (ichemo == 5)
     if (ichemo > TRACER) then
         idrug = (ichemo - TRACER - 1)/3 + 1
         im = ichemo - TRACER - 1 - 3*(idrug-1)		! 0 = drug, 1 = metab1, 2 = metab2
@@ -135,16 +141,23 @@ do ic = 1,neqn
     Cex = Cmedium(ichemo)
 	C = Cin(ichemo)     ! = y(ic)
 	membrane_flux = area_factor*(membrane_kin*Cex - membrane_kout*C)
+!	if (is_metab1) then
+!	    write(*,'(a,3e12.3)') 'metab1: membrane_flux: ',membrane_flux,Cex,C
+!	endif
 	dydt(ic) = 0
 	if (ic <= ncvars .and. chemo_active(ic)) then      ! cell variable
 	    dCreact = 0
 	    if (ichemo == OXYGEN) then
 		    metab = O2_metab(C)
-		    dCreact = (-metab*chemo(ichemo)%max_cell_rate + membrane_flux)/vol_cm3	! convert mass rate (mol/s) to concentration rate (mM/s)
+		    dCreact = (-metab*chemo(ichemo)%max_cell_rate + membrane_flux)/vol_cm3	! convert mass rate (mumol/s) to concentration rate (mM/s)
 !		    write(*,'(a,6e12.3)') 'O2: ',C,metab,chemo(ichemo)%max_cell_rate,membrane_flux,vol_cm3,dCreact
 	    elseif (ichemo == GLUCOSE) then
 		    metab = C**Ng/(chemo(ichemo)%MM_C0**Ng + C**Ng)
-		    dCreact = (-metab*chemo(ichemo)%max_cell_rate + membrane_flux)/vol_cm3	! convert mass rate (mol/s) to concentration rate (mM/s)
+		    cell_flux = metab*chemo(ichemo)%max_cell_rate
+		    if (use_HIF1) then
+		        ! cell_flux = cell_flux*(1 + b*H)
+		    endif
+		    dCreact = (-cell_flux + membrane_flux)/vol_cm3	! convert mass rate (mumol/s) to concentration rate (mM/s)
 !		    write(*,'(a,6e11.3)') 'glucose: ',C,metab,chemo(ichemo)%max_cell_rate,membrane_flux,vol_cm3,dCreact
 	    elseif (im == 0) then
 	        if (metabolised(ict,0) .and. C > 0) then
@@ -175,7 +188,7 @@ do ic = 1,neqn
         dydt(ic) = dCreact - C*decay_rate
     else    ! medium variable 
         if (chemo_active(ic)) then
-            dydt(ic) = -Ncells*membrane_flux/total_volume - C*decay_rate
+            dydt(ic) = -Ncells*membrane_flux/total_volume - Cex*decay_rate
         else
             dydt(ic) = 0
         endif
@@ -235,6 +248,7 @@ neqn = k
 
 !write(*,*) 'solver: nchemo,neqn: ',nchemo,neqn
 !write(*,'(10f7.3)') C(1:neqn)
+!write(*,'(a,3f8.5)') 'solver: metab1: ',Caverage(MAX_CHEMO+4:MAX_CHEMO+6)
 
 ict = 1 ! for now just a single cell type
 
@@ -275,6 +289,7 @@ do ic = 1,nchemo
     k = k + 1
     Caverage(MAX_CHEMO + ichemo) = C(k)
 enddo
+!write(*,'(a,3f8.5)') 'did solver: metab1: ',Caverage(MAX_CHEMO+4:MAX_CHEMO+6)
 ! Note: medium oxygen is unchanged
 
 
@@ -330,6 +345,7 @@ end function
 ! Note that the cell's O2 uptake rate is taken to be independent of any other factors,
 ! e.g. independent of cell size.
 ! NOTE: Currently only for OXYGEN - OK because membrane_diff_in = membrane_diff_out
+! Note: needs to be amended to account for HIF-1
 !----------------------------------------------------------------------------------
 !real(REAL_KIND) function getCinO2(C)
 real(REAL_KIND) function getCin(ichemo,C)

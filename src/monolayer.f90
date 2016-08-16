@@ -499,15 +499,21 @@ read(nfcell,*) spcrad_value
 !read(nfcell,*) isaveslicedata
 !read(nfcell,*) saveslice%filebase
 !read(nfcell,*) saveslice%dt
-!read(nfcell,*) saveslice%nt
+!read(nfcell,*) saveslice%nt 
 
 read(nfcell,*) Ndrugs_used
 if (Ndrugs_used > 0) then
     call ReadDrugData(nfcell)
 endif
+is_radiation = .false.
 if (use_events) then
 	call ReadProtocol(nfcell)
 	use_treatment = .false.
+endif
+if (is_radiation) then
+    call logger('makeTCP')
+    call makeTCP(ccp%tcp,NTCP,ccp%Krepair_base,ccp%Kmisrepair,ccp%Kcp) ! set checkpoint repair time limits 
+    call logger('did makeTCP')
 endif
 
 close(nfcell)
@@ -674,9 +680,6 @@ ccp%G2_mean_delay = 3600*ccp%G2_mean_delay
 
 ccp%Pk_G1 = 1./ccp%G1_mean_delay    ! /sec
 ccp%Pk_G2 = 1./ccp%G2_mean_delay    ! /sec
-call logger('makeTCP')
-call makeTCP(ccp%tcp,NTCP,ccp%Krepair_base,ccp%Kmisrepair,ccp%Kcp) ! set checkpoint repair time limits 
-call logger('did makeTCP')
 end subroutine
 
 
@@ -831,6 +834,7 @@ do itime = 1,ntimes
 		event(kevent)%dose = 0
 		write(nflog,'(a,i3,2f8.3)') 'define MEDIUM_EVENT: volume: ',kevent,event(kevent)%volume,event(kevent)%O2medium
 	elseif (trim(line) == 'RADIATION') then
+        is_radiation = .true.
 		kevent = kevent + 1
 		event(kevent)%etype = RADIATION_EVENT
 		read(nf,*) t
@@ -1536,6 +1540,7 @@ do it_solve = 1,NT_CONC
     call SetOxygenLevels
 enddo
 !write(nflog,*) 'did Solver'
+call CheckDrugConcs
 call CheckDrugPresence
 
 res = 0

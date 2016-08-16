@@ -1488,7 +1488,8 @@ void MainWindow::readInputFile()
         } else {
 			parm->set_value(k,data[0].toDouble());
 		}
-        if (p.tag.contains("SAVE_SLICE_DATA_NUMBER")) {   // drug data follows, before plot data
+//        if (p.tag.contains("SAVE_SLICE_DATA_NUMBER")) {   // drug data follows, before plot data
+        if (p.tag.contains("SPCRAD")) {   // drug data follows, before plot data
             readDrugData(&in);
         }
     }
