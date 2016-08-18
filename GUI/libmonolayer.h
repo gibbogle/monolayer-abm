@@ -21,7 +21,7 @@ void get_nfacs(int *);
 void get_facs(double *);
 void get_histo(int, double *, double *, double *, double *, double *, double *);
 void get_constituents(int *, int *, int *, char *, int *);
-void make_colony_distribution(double *, double *, int *);
+void make_colony_distribution(double *, double *, double *, int *);
 
 void get_string(char **);
 

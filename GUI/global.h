@@ -132,6 +132,7 @@ namespace Global
     extern bool recordingField;
 
     extern bool simulate_colony;
+    extern double colony_days;
     extern double dist[40];
     extern double ddist;
     extern int ndist;

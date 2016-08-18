@@ -444,7 +444,8 @@ integer :: k, kcell, nlist0, ityp, idrug, prev_phase, kpar=0
 type(cell_type), pointer :: cp
 type(cycle_parameters_type), pointer :: ccp
 real(REAL_KIND) :: R
-integer :: ndivide, divide_list(1000)
+integer, parameter :: MAX_DIVIDE_LIST = 10000
+integer :: ndivide, divide_list(MAX_DIVIDE_LIST)
 logical :: drugkilled
 logical :: mitosis_entry, in_mitosis, divide
 
@@ -489,7 +490,7 @@ do kcell = 1,nlist0
                 in_mitosis = .true.
             endif
         endif
-		if (cp%phase < Checkpoint2) then
+		if (cp%phase < Checkpoint2 .and. cp%phase /= Checkpoint1) then
 		    call growcell(cp,dt)
 		endif	
 	endif
@@ -556,6 +557,12 @@ do kcell = 1,nlist0
 	endif
 	if (divide) then
 		ndivide = ndivide + 1
+		if (ndivide > MAX_DIVIDE_LIST) then
+		    write(logmsg,*) 'Error: growcells: MAX_DIVIDE_LIST exceeded: ',MAX_DIVIDE_LIST
+		    call logger(logmsg)
+		    ok = .false.
+		    return
+		endif
 		divide_list(ndivide) = kcell
 	endif
 enddo
@@ -589,7 +596,7 @@ else
     glucose_growth = chemo(GLUCOSE)%controls_growth
     Cin_0 = cp%Cin
     metab_O2 = O2_metab(Cin_0(OXYGEN))	! Note that currently growth depends only on O2
-    metab_glucose = glucose_metab(Cin_0(GLUCOSE))
+    metab_glucose = glucose_metab(Cin_0(GLUCOSE))   
     if (oxygen_growth .and. glucose_growth) then
 	    metab = metab_O2*metab_glucose
     elseif (oxygen_growth) then
@@ -628,7 +635,7 @@ do kcell = 1,nlist
     endif
 	if (cp%state == DEAD) cycle
 	C_O2 = chemo(OXYGEN)%bdry_conc
-	C_glucose = cp%Cin(GLUCOSE)
+	C_glucose = chemo(GLUCOSE)%bdry_conc
 	if (oxygen_growth .and. glucose_growth) then
 	    metab_O2 = O2_metab(C_O2)
 		metab_glucose = glucose_metab(C_glucose)
@@ -645,6 +652,10 @@ do kcell = 1,nlist
 		dVdt = 0
 	endif
 	cp%dVdt = dVdt
+    if (cp%dVdt == 0) then
+        write(*,*) 'setinitialgrowthrate: dVdt: = 0: kcell: ',kcell
+        stop
+    endif
 enddo
 end subroutine
 
@@ -684,6 +695,11 @@ else
 	    endif
     endif
 endif
+if (cp%dVdt == 0) then
+    write(nflog,*) 'get_dVdt: = 0'
+    write(*,*) 'get_dVdt: dVdt = 0'
+    stop
+endif
 end function
 
 
@@ -696,12 +712,14 @@ logical :: ok
 integer :: kcell2, ityp, nbrs0
 real(REAL_KIND) :: r(3), c(3), cfse0, cfse2, V0, Tdiv
 type(cell_type), pointer :: cp1, cp2
+type(cycle_parameters_type), pointer :: ccp
 
 !write(*,*) 'divider:'
 !write(logmsg,*) 'divider: ',kcell1 
 !call logger(logmsg)
 ok = .true.
 !tnow = istep*DELTA_T
+ccp => cc_parameters
 if (colony_simulation) then
     cp1 => ccell_list(kcell1)
 else
@@ -753,8 +771,13 @@ if (cp1%growth_delay) then
 	cp1%growth_delay = (cp1%N_delayed_cycles_left > 0)
 endif
 cp1%G2_M = .false.
+cp1%G1_time = tnow + (max_growthrate(ityp)/cp1%dVdt)*ccp%T_G1(ityp)    ! time spend in G1 varies inversely with dV/dt
 cp1%Iphase = .true.
 cp1%phase = G1_phase
+
+!if (max_growthrate(ityp)/cp1%dVdt > 2) then
+!    write(*,*) 'dVdt: ',kcell1,max_growthrate(ityp)/cp1%dVdt
+!endif
 
 ndoublings = ndoublings + 1
 doubling_time_sum = doubling_time_sum + tnow - cp1%t_divide_last
@@ -774,97 +797,6 @@ endif
 !if (colony_simulation) write(*,'(a,i6,2e12.3)') 'new cell: ',kcell2,cp2%V,cp2%divide_volume
 end subroutine
 
-!-----------------------------------------------------------------------------------------
-! The daughter cell kcell1 is given the same characteristics as kcell0 and placed at site1.
-! Random variation is introduced into %divide_volume.
-!-----------------------------------------------------------------------------------------
-subroutine CloneCell(kcell0,kcell1,site1,ok)
-integer :: kcell0, kcell1, site1(3), ityp, idrug
-logical :: ok
-integer :: kpar = 0
-real(REAL_KIND) :: V0, Tdiv, R, Vex, Cex(MAX_CHEMO)
-
-ok = .true.
-!tnow = istep*DELTA_T
-
-if (use_gaplist .and. ngaps > 0) then
-    kcell1 = gaplist(ngaps)
-    ngaps = ngaps - 1
-else
-    nlist = nlist + 1
-    if (nlist > max_nlist) then
-		write(logmsg,*) 'Error: Dimension of cell_list() has been exceeded: increase max_nlist and rebuild'
-		call logger(logmsg)
-		ok = .false.
-		return
-	endif
-    kcell1 = nlist
-endif
-
-ityp = cell_list(kcell0)%celltype
-Ncells = Ncells + 1
-Ncells_type(ityp) = Ncells_type(ityp) + 1
-!if (cell_list(kcell0)%generation > 1 .and. cell_list(kcell0)%radiation_tag) then 
-!	write(*,*) 'radiation-tagged cell gen > 1 divides: ',kcell0,cell_list(kcell0)%generation 
-!	stop
-!endif
-cell_list(kcell0)%generation = cell_list(kcell0)%generation + 1
-if (cell_list(kcell0)%growth_delay) then
-	cell_list(kcell0)%N_delayed_cycles_left = cell_list(kcell0)%N_delayed_cycles_left - 1
-	cell_list(kcell0)%growth_delay = (cell_list(kcell0)%N_delayed_cycles_left > 0)
-endif
-cell_list(kcell0)%G2_M = .false.
-cell_list(kcell0)%t_divide_last = tnow
-cell_list(kcell1)%celltype = cell_list(kcell0)%celltype
-cell_list(kcell1)%state = cell_list(kcell0)%state
-cell_list(kcell1)%generation = cell_list(kcell0)%generation
-!cell_list(kcell1)%site = site1
-!cell_list(kcell1)%ID = lastID
-cell_list(kcell1)%ID = cell_list(kcell0)%ID
-!if (cell_list(kcell0)%ID == 582) then
-!	write(*,*) 'New cell with ID=582: ',kcell1
-!endif
-cell_list(kcell1)%p_rad_death = cell_list(kcell0)%p_rad_death
-cell_list(kcell1)%p_drug_death = cell_list(kcell0)%p_drug_death
-cell_list(kcell1)%radiation_tag = cell_list(kcell0)%radiation_tag
-if (cell_list(kcell1)%radiation_tag) then
-	Nradiation_tag(ityp) = Nradiation_tag(ityp) + 1
-endif
-cell_list(kcell1)%drug_tag = cell_list(kcell0)%drug_tag
-do idrug = 1,ndrugs_used
-	if (cell_list(kcell1)%drug_tag(idrug)) then
-		Ndrug_tag(idrug,ityp) = Ndrug_tag(idrug,ityp) + 1
-	endif
-enddo
-cell_list(kcell1)%anoxia_tag = .false.
-cell_list(kcell1)%aglucosia_tag = .false.
-!cell_list(kcell1)%exists = .true.
-cell_list(kcell1)%active = .true.
-cell_list(kcell1)%growth_delay = cell_list(kcell0)%growth_delay
-if (cell_list(kcell1)%growth_delay) then
-	cell_list(kcell1)%dt_delay = cell_list(kcell0)%dt_delay
-	cell_list(kcell1)%N_delayed_cycles_left = cell_list(kcell0)%N_delayed_cycles_left
-endif
-cell_list(kcell1)%G2_M = .false.
-cell_list(kcell1)%t_divide_last = tnow
-cell_list(kcell1)%dVdt = cell_list(kcell0)%dVdt
-cell_list(kcell1)%V = cell_list(kcell0)%V
-!R = par_uni(kpar)
-!cell_list(kcell1)%divide_volume = Vdivide0 + dVdivide*(2*R-1)
-V0 = cell_list(kcell0)%V
-cell_list(kcell1)%divide_volume = get_divide_volume(ityp, V0, Tdiv)
-cell_list(kcell1)%divide_time = Tdiv
-cell_list(kcell1)%t_anoxia = 0
-cell_list(kcell1)%t_aglucosia = 0
-cell_list(kcell1)%Cin = cell_list(kcell0)%Cin
-!cell_list(kcell1)%Cex = cell_list(kcell0)%Cex
-cell_list(kcell1)%dCdt = cell_list(kcell0)%dCdt
-cell_list(kcell1)%dMdt = cell_list(kcell0)%dMdt
-cell_list(kcell1)%M = cell_list(kcell0)%M
-!occupancy(site1(1),site1(2),site1(3))%indx(1) = kcell1
-
-!cell_list(kcell1)%Cex = occupancy(site1(1),site1(2),site1(3))%C
-end subroutine
 
 !----------------------------------------------------------------------------------
 ! Makes a slight modification to the Michaelis-Menten function to create a

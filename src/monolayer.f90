@@ -97,9 +97,9 @@ call SetupChemo
 
 ! New cell cycle formulation - need a value for max (unconstrained) growth rate
 use_volume_method = .not.use_cell_cycle
-if (use_cell_cycle .and. .not.use_volume_based_transition) then
-    use_constant_growthrate = .true.
-endif
+!if (use_cell_cycle .and. .not.use_volume_based_transition) then
+!    use_constant_growthrate = .true.
+!endif
 ! Growth occurs during G1, S and G2, not in checkpoints
 ccp => cc_parameters
 tgrowth = ccp%T_G1 + ccp%T_S + ccp%T_G2
@@ -1042,9 +1042,10 @@ cp%Iphase = .true.
 !cp%nspheres = 1
 
 V0 = Vdivide0/2
+cp%divide_volume = get_divide_volume(ityp, V0, Tdiv)
+cp%divide_time = Tdiv
+cp%dVdt = max_growthrate(ityp)
 if (use_volume_method) then
-    cp%divide_volume = get_divide_volume(ityp, V0, Tdiv)
-    cp%divide_time = Tdiv
     !cp%divide_volume = Vdivide0
     if (initial_count == 1) then
 	    cp%V = 0.9*cp%divide_volume
@@ -1121,7 +1122,8 @@ call get_random_vector3(v)	! set initial axis direction
 !cp%centre(:,2) = c - (cp%d/2)*v
 !cp%nbrs = 0
 !cp%Cex = Caverage(1,1,1,:)	! initially the concentrations are the same everywhere
-!cp%Cin = cp%Cex
+cp%Cin(OXYGEN) = chemo(OXYGEN)%bdry_conc
+cp%Cin(GLUCOSE) = chemo(GLUCOSE)%bdry_conc
 cp%CFSE = generate_CFSE(1.d0)
 
 !cp%ndt = ndt
@@ -1436,22 +1438,27 @@ real(REAL_KIND) :: Kin, Kout, Kd, Cex, Cin, Cbnd, A, d, flux, Cin_prev
 real(REAL_KIND) :: tol = 1.0e-6
 
 ichemo = OXYGEN
-Kin = chemo(ichemo)%membrane_diff_in
-Kout = chemo(ichemo)%membrane_diff_out
-Cex = Caverage(MAX_CHEMO+ichemo)
-Cin = Caverage(ichemo)
-Cbnd = chemo(ichemo)%bdry_conc
-Kd = chemo(ichemo)%medium_diff_coef
-A = well_area
-d = total_volume/A
-
-do k = 1,100
-    Cin_prev = Cin
-    Cex = (A*Kd*Cbnd/d + Ncells*Kout*Cin)/(A*Kd/d + Ncells*Kin)
+if (chemo(ichemo)%constant) then
+    Cex = chemo(ichemo)%bdry_conc
     Cin = getCin(ichemo,Cex)
-!    write(*,'(a,i4,2e15.6)') 'SetMediumOxygen: ',k,Cin,Cex
-    if (abs(Cin-Cin_prev)/Cin_prev < tol) exit
-enddo
+else
+    Kin = chemo(ichemo)%membrane_diff_in
+    Kout = chemo(ichemo)%membrane_diff_out
+    Cex = Caverage(MAX_CHEMO+ichemo)
+    Cin = Caverage(ichemo)
+    Cbnd = chemo(ichemo)%bdry_conc
+    Kd = chemo(ichemo)%medium_diff_coef
+    A = well_area
+    d = total_volume/A
+
+    do k = 1,100
+        Cin_prev = Cin
+        Cex = (A*Kd*Cbnd/d + Ncells*Kout*Cin)/(A*Kd/d + Ncells*Kin)
+        Cin = getCin(ichemo,Cex)
+    !    write(*,'(a,i4,2e15.6)') 'SetMediumOxygen: ',k,Cin,Cex
+        if (abs(Cin-Cin_prev)/Cin_prev < tol) exit
+    enddo
+endif
 Caverage(OXYGEN) = Cin
 Caverage(MAX_CHEMO+OXYGEN) = Cex
 end subroutine

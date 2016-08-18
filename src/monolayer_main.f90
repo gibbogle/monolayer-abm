@@ -8,14 +8,14 @@ implicit none
 integer :: ncpu, res, summarydata(100)
 character*(128) :: infile, outfile, runfile
 character*(64) :: travelfile = 'travel_time_dist.out'
-integer :: status, nlen, cnt, i, inbuflen, outbuflen, icolony
+integer :: status, nlen, cnt, i, inbuflen, outbuflen
 integer :: jstep, hour, ntot, ncog, inflow, irun, i_hypoxia_cutoff,i_growth_cutoff, nsumm_interval
 character*(128) :: b, c, progname
 real :: vasc
 real(8) :: t1, t2
 logical :: simulate_colony
 integer :: idist, ndist = 40
-real(8) :: dist(40), ddist = 50
+real(8) :: colony_days, dist(40), ddist = 50
 
 runfile = 'monolayer_main.out'
 open(nfrun,file=runfile,status='replace')
@@ -39,8 +39,8 @@ progname = c(1:nlen)
 cnt = command_argument_count ()
 !write (*,*) 'number of command arguments = ', cnt
 if (cnt < 3) then
-    write(*,*) 'Use: ',trim(progname),' num_cpu input_file colony_flag'
-    write(*,*) '  colony_flag = 1 to simulate colony, 0 otherwise'
+    write(*,*) 'Use: ',trim(progname),' num_cpu input_file colony_days'
+    write(*,*) '  simulate colony if colony_days > 0'
     stop
 endif
 
@@ -60,8 +60,8 @@ do i = 1, cnt
     elseif (i == 3) then
 !        outfile = c(1:nlen)																! --> outfile
 !        write(*,*) 'Output file: ',outfile
-        read(c(1:nlen),*) icolony															! --> ncpu
-        simulate_colony = (icolony == 1)
+        read(c(1:nlen),*) colony_days															! --> ncpu
+        simulate_colony = (colony_days > 0)
     endif
 end do
 
@@ -94,7 +94,7 @@ do irun = 1,1
 		endif
 	enddo
 	if (simulate_colony) then
-	    call make_colony_distribution(dist,ddist,ndist)
+	    call make_colony_distribution(colony_days,dist,ddist,ndist)
         do idist = 1,ndist
 	        write(nfrun,'(i4,a,i4,f6.3)') int((idist-1)*ddist),'-',int(idist*ddist),dist(idist)
         enddo

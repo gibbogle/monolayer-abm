@@ -67,7 +67,7 @@ integer, parameter :: EXTRA = 1
 integer, parameter :: INTRA = 2
 integer, parameter :: MAX_CELLTYPES = 2
 integer, parameter :: MAX_DRUGTYPES = 2
-integer, parameter :: max_nlist = 200000
+integer, parameter :: max_nlist = 500000
 integer, parameter :: NRF = 4
 integer, parameter :: LIMIT_THRESHOLD = 1500
 
@@ -368,7 +368,7 @@ logical :: use_divide_time_distribution = .true.
 logical :: use_constant_divide_volume = .true.
 logical :: use_volume_method
 logical :: use_cell_cycle
-logical :: use_constant_growthrate = .true. 
+logical :: use_constant_growthrate = .false. 
 logical :: randomise_initial_volume
 logical :: is_radiation
 !logical :: use_FD = .true.

@@ -6,7 +6,7 @@ use global
 use cellstate
 implicit none
 
-integer, parameter :: n_colony_days=10
+!integer, parameter :: n_colony_days=10
 integer :: nmax
 
 contains
@@ -23,19 +23,19 @@ contains
 ! dt_delay
 ! t_growth_delay_end
 ! N_delayed_cycles_left
-! The new method simply continues the simulation from where it ended, for 10 days.
+! The new method simply continues the simulation from where it ended, for 10 days. 
 !---------------------------------------------------------------------------------------------------
-subroutine make_colony_distribution(dist,ddist,ndist) bind(C)
+subroutine make_colony_distribution(n_colony_days,dist,ddist,ndist) bind(C)
 !DEC$ ATTRIBUTES DLLEXPORT :: make_colony_distribution
 use, intrinsic :: iso_c_binding
-real(c_double) :: dist(*), ddist
+real(c_double) :: n_colony_days, dist(*), ddist
 integer(c_int) :: ndist
 real(REAL_KIND) :: V0, dVdt, dt, t, tend
 real(REAL_KIND) :: tnow_save
 integer :: kcell, ityp, n, idist, ncycmax, ntot, nlist_save
 type (cell_type), pointer :: cp
 
-write(logmsg,*) 'make_colony_distribution: nlist: ',nlist
+write(logmsg,*) 'make_colony_distribution: nlist, n_colony_days: ',nlist,n_colony_days
 call logger(logmsg)
 colony_simulation = .true.
 nlist_save = nlist
@@ -58,6 +58,10 @@ do kcell = 1, nlist_save
 	if (mod(kcell,100) == 0) then
 	    write(logmsg,*) 'cell: n: ',kcell,n
 	    call logger(logmsg)
+	endif
+	if (n < 50) then
+	    write(*,*) 'small colony: ',kcell,n
+	    stop
 	endif
 	ntot = ntot + n
 	idist = n/ddist + 1
@@ -91,18 +95,20 @@ real(REAL_KIND) :: V0, Tdiv0, r_mean, c_rate, dVdt, Tmean, R
 logical :: changed, ok
 type (cell_type), pointer :: cp
 
-!write(*,'(a,i6,2f8.0)') 'make_colony: ',kcell,tnow,tend
+!write(*,'(a,i6,2f12.0)') 'make_colony: ',kcell,tnow,tend
 ccell_list(1) = cell_list(kcell)
 ccell_list(1)%anoxia_tag = .false.
 ccell_list(1)%aglucosia_tag = .false.
 ccell_list(1)%drug_tag = .false.
 dt = DELTA_T
 
+!write(*,*) ccell_list(1)%dVdt,max_growthrate(1),ccell_list(1)%G2_time
 nlist = 1
 do while (tnow < tend)
 	tnow = tnow + dt
     call grower(dt,changed,ok)
 enddo
+!write(*,*) nlist,ccell_list(nlist)%dVdt,max_growthrate(1),ccell_list(nlist)%V
 n = 0
 do icell = 1,nlist
 	if (ccell_list(icell)%state /= DEAD) n = n+1

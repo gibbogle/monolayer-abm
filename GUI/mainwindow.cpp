@@ -165,6 +165,7 @@ MainWindow::MainWindow(QWidget *parent)
     tabs->setCurrentIndex(9);
     setupPopup();
     pushButton_colony->setEnabled(false);
+    Global::colony_days = lineEdit_colony_days->text().toDouble();
     goToInputs();
 }
 
