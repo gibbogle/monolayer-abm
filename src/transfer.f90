@@ -242,8 +242,9 @@ write(nfres,'(a,a,2a12,i8,e12.4,22i7,16e12.4)') trim(header),' ',gui_run_version
 	nhypoxic(:)/real(Ncells), nclonohypoxic(:)/real(TNviable), ngrowth(:)/real(Ncells), &
 	plate_eff(1:2), &
 	cmedium(OXYGEN), cmedium(GLUCOSE), cmedium(DRUG_A), cmedium(DRUG_B), &
-	100*doubling_time_100
-		
+	doubling_time_100/100.
+	
+write(*,*) doubling_time_100
 !call sum_dMdt(GLUCOSE)
 
 end subroutine
