@@ -140,6 +140,7 @@ do ic = 1,neqn
 
     Cex = Cmedium(ichemo)
 	C = Cin(ichemo)     ! = y(ic)
+!	if (ichemo == DRUG_A) write(*,'(a,2f8.4)') 'Cin,Cex: ',C,Cex
 	membrane_flux = area_factor*(membrane_kin*Cex - membrane_kout*C)
 !	if (is_metab1) then
 !	    write(*,'(a,3e12.3)') 'metab1: membrane_flux: ',membrane_flux,Cex,C
@@ -192,6 +193,7 @@ do ic = 1,neqn
         else
             dydt(ic) = 0
         endif
+!        if (ichemo > TRACER) write(*,*) 'drug medium dydt: ',dydt(ic)
     endif
 	if (isnan(dydt(ic))) then
 		write(nflog,*) 'f_rkc: dydt isnan: ',ic,ichemo,dydt(ic)
@@ -249,6 +251,10 @@ neqn = k
 !write(*,*) 'solver: nchemo,neqn: ',nchemo,neqn
 !write(*,'(10f7.3)') C(1:neqn)
 !write(*,'(a,3f8.5)') 'solver: metab1: ',Caverage(MAX_CHEMO+4:MAX_CHEMO+6)
+if (chemo(DRUG_A)%present) then
+	write(nfout,'(a,f7.3,7e12.3)') 'EC_IC_drug_conc: ',t_simulation/3600, Caverage(OXYGEN), &
+		Caverage(MAX_CHEMO +DRUG_A:MAX_CHEMO +DRUG_A+2),Caverage(DRUG_A:DRUG_A+2)
+endif
 
 ict = 1 ! for now just a single cell type
 
@@ -289,7 +295,9 @@ do ic = 1,nchemo
     k = k + 1
     Caverage(MAX_CHEMO + ichemo) = C(k)
 enddo
-!write(*,'(a,3f8.5)') 'did solver: metab1: ',Caverage(MAX_CHEMO+4:MAX_CHEMO+6)
+!if (chemo(DRUG_A)%present) then
+!	write(nfout,'(a,3e12.3)') 'intracellular drug conc: ',Caverage(DRUG_A:DRUG_A+2)
+!endif
 ! Note: medium oxygen is unchanged
 
 

@@ -22,6 +22,7 @@ open(nfrun,file=runfile,status='replace')
 call disableTCP
 
 outfile = 'monolayer_main.res'
+colony_days = 0
 
 call get_command (b, nlen, status)
 if (status .ne. 0) then
@@ -37,9 +38,11 @@ end if
 !write (*,*) 'command name = ', c(1:len)
 progname = c(1:nlen)
 cnt = command_argument_count ()
-!write (*,*) 'number of command arguments = ', cnt
-if (cnt < 3) then
-    write(*,*) 'Use: ',trim(progname),' num_cpu input_file colony_days'
+write (*,*) 'number of command arguments = ', cnt
+if (cnt < 2) then
+    write(*,*) 'Use: ',trim(progname),' num_cpu input_file'
+    write(*,*) 'or:  ',trim(progname),' num_cpu input_file output_file'
+    write(*,*) 'or:  ',trim(progname),' num_cpu input_file output_file colony_days'
     write(*,*) '  simulate colony if colony_days > 0'
     stop
 endif
@@ -58,9 +61,10 @@ do i = 1, cnt
         infile = c(1:nlen)																! --> infile
         write(*,*) 'Input file: ',infile
     elseif (i == 3) then
-!        outfile = c(1:nlen)																! --> outfile
-!        write(*,*) 'Output file: ',outfile
-        read(c(1:nlen),*) colony_days															! --> ncpu
+        outfile = c(1:nlen)																! --> outfile
+        write(*,*) 'Output file: ',outfile
+    elseif (i == 4) then
+        read(c(1:nlen),*) colony_days													! --> colony_days
         simulate_colony = (colony_days > 0)
     endif
 end do
@@ -85,9 +89,9 @@ do irun = 1,1
 	do jstep = 1,Nsteps
 !		write(*,*) 'jstep: ',jstep
 		call simulate_step(res)
-!		if (mod(jstep,nsumm_interval) == 0) then
-!			call get_summary(summarydata,i_hypoxia_cutoff,i_growth_cutoff)
-!		endif
+		if (mod(jstep,nsumm_interval) == 0) then
+			call get_summary(summarydata,i_hypoxia_cutoff,i_growth_cutoff)
+		endif
 		if (res /= 0) then
 			write(*,*) 'Error exit: ',res
 			stop

@@ -91,10 +91,10 @@ real(REAL_KIND) :: cf_O2, cf_glucose, pcp_O2, pcp_glucose, pcp_starvation, R
 logical :: switch
 
 phase = cp%phase
-if (cp%dVdt == 0) then
-    write(*,*) 'timestep: dVdt=0: '
-    stop
-endif
+!if (cp%dVdt == 0) then
+!    write(*,*) 'timestep: dVdt=0: '
+!    stop
+!endif
 ityp = cp%celltype
 if (.not.colony_simulation .and. (phase == Checkpoint1)) then    ! check for starvation arrest
     cf_O2 = cp%Cin(OXYGEN)/anoxia_threshold

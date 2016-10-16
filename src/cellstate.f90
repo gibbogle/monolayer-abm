@@ -148,15 +148,17 @@ real(REAL_KIND) ::C_O2, SER
 real(REAL_KIND) :: Cs							! concentration of radiosensitising drug
 real(REAL_KIND) :: SER_max0, SER_Km, SER_KO2	! SER parameters of the drug
 real(REAL_KIND) :: SERmax						! max sensitisation at the drug concentration
-integer :: ityp, idrug, ichemo, im
+integer :: ityp, idrug, iparent, ichemo, im
 
 ityp = cp%celltype
 SER = 1.0
 do idrug = 1,Ndrugs_used
-    ichemo = 4 + 3*(idrug-1)
+!    ichemo = TRACER + 3*(idrug-1)
+    iparent = TRACER + 1 + 3*(idrug-1)
     if (.not.chemo(ichemo)%present) cycle
     do im = 0,2
-	    ichemo = 4 + 3*(idrug-1) + im
+!	    ichemo = 4 + 3*(idrug-1) + im
+	    ichemo = iparent + im
 	    if (drug(idrug)%sensitises(ityp,im)) then
 		    Cs = cp%Cin(ichemo)	! concentration of drug/metabolite in the cell
 		    SER_max0 = drug(idrug)%SER_max(ityp,im)
@@ -219,7 +221,7 @@ subroutine CellDeath(dt,ok)
 real(REAL_KIND) :: dt
 logical :: ok
 integer :: kcell, nlist0, site(3), i, ichemo, idrug, im, ityp, killmodel, kpar=0 
-real(REAL_KIND) :: C_O2, C_glucose, Cdrug, n_O2, kmet, Kd, dMdt, kill_prob, dkill_prob, death_prob
+real(REAL_KIND) :: C_O2, C_glucose, Cdrug, n_O2, kmet, Kd, dMdt, kill_prob, dkill_prob, death_prob, survival_prob
 logical :: anoxia_death, aglucosia_death
 type(drug_type), pointer :: dp
 type(cell_type), pointer :: cp
@@ -287,6 +289,7 @@ do kcell = 1,nlist
 		ichemo = TRACER + 1 + 3*(idrug-1)	
 		kill_prob = 0
 		death_prob = 0
+		survival_prob = 1
 		do im = 0,2
 			if (.not.dp%kills(ityp,im)) cycle
 			killmodel = dp%kill_model(ityp,im)		! could use %drugclass to separate kill modes
@@ -296,9 +299,15 @@ do kcell = 1,nlist
 			kmet = (1 - dp%C2(ityp,im) + dp%C2(ityp,im)*dp%KO2(ityp,im)**n_O2/(dp%KO2(ityp,im)**n_O2 + C_O2**n_O2))*dp%Kmet0(ityp,im)
 			dMdt = kmet*Cdrug
 			call getDrugKillProb(killmodel,Kd,dMdt,Cdrug,dt,dkill_prob)
-			kill_prob = kill_prob + dkill_prob
+!			kill_prob = kill_prob + dkill_prob
+			survival_prob = survival_prob*(1 - dkill_prob)
 			death_prob = max(death_prob,dp%death_prob(ityp,im))
+!			if (istep == 362 .and. kcell == 1) then
+!				write(nfout,'(4i4,7e11.3)') istep,kcell,ityp,im,n_O2,Kd,dp%C2(ityp,im),dp%KO2(ityp,im),dp%Kmet0(ityp,im),Cdrug,C_O2
+!				write(nfout,'(4e12.3)') kmet,dMdt,dkill_prob,kill_prob
+!			endif
 		enddo
+		kill_prob = 1 - survival_prob
 	    if (.not.cp%drug_tag(idrug) .and. par_uni(kpar) < kill_prob) then		! don't tag more than once
 			cp%p_drug_death(idrug) = death_prob
 			cp%drug_tag(idrug) = .true.
@@ -468,6 +477,7 @@ do kcell = 1,nlist0
 	divide = .false.
 	mitosis_entry = .false.
 	in_mitosis = .false.
+!	if (kcell == 10) write(*,'(a,2i6,2e12.3)') 'kcell,phase,dVdt,V: ',kcell,cp%phase,cp%dVdt,cp%V
 	if (use_volume_method) then
 !        if (colony_simulation) then
 !            write(*,'(a,i6,L2,2e12.3)') 'kcell: ',kcell,cp%Iphase,cp%V,cp%divide_volume
@@ -652,10 +662,10 @@ do kcell = 1,nlist
 		dVdt = 0
 	endif
 	cp%dVdt = dVdt
-    if (cp%dVdt == 0) then
-        write(*,*) 'setinitialgrowthrate: dVdt: = 0: kcell: ',kcell
-        stop
-    endif
+!    if (cp%dVdt == 0) then
+!        write(*,*) 'setinitialgrowthrate: dVdt: = 0: kcell: ',kcell
+!        stop
+!    endif
 enddo
 end subroutine
 
@@ -695,11 +705,11 @@ else
 	    endif
     endif
 endif
-if (cp%dVdt == 0) then
-    write(nflog,*) 'get_dVdt: = 0'
-    write(*,*) 'get_dVdt: dVdt = 0'
-    stop
-endif
+!if (cp%dVdt == 0) then
+!    write(nflog,*) 'get_dVdt: = 0'
+!    write(*,*) 'get_dVdt: dVdt = 0'
+!    stop
+!endif
 end function
 
 

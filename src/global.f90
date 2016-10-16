@@ -36,8 +36,9 @@ integer, parameter :: neumann(3,6) = reshape((/ -1,0,0, 1,0,0, 0,-1,0, 0,1,0, 0,
 integer, parameter :: CFSE = 0
 integer, parameter :: OXYGEN = 1
 integer, parameter :: GLUCOSE = 2
-integer, parameter :: TRACER = 3
-integer, parameter :: DRUG_A = 4
+integer, parameter :: LACTATE = 3
+integer, parameter :: TRACER = 4
+integer, parameter :: DRUG_A = 5
 integer, parameter :: TPZ_DRUG = DRUG_A
 integer, parameter :: TPZ_DRUG_METAB_1 = TPZ_DRUG + 1
 integer, parameter :: TPZ_DRUG_METAB_2 = TPZ_DRUG + 2
@@ -374,6 +375,7 @@ logical :: is_radiation
 !logical :: use_FD = .true.
 logical :: use_gaplist = .true.
 !logical :: relax
+logical :: medium_change_step
 logical :: use_parallel
 logical :: colony_simulation
 logical :: use_HIF1 = .false.

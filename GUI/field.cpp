@@ -239,7 +239,7 @@ void Field::setMaxConcentrations(QGroupBox *gbox)
     }
 
     line_maxConc_list[OXYGEN]->setText("0.18");
-    line_maxConc_list[GLUCOSE]->setText("9.0");
+    line_maxConc_list[GLUCOSE]->setText("5.5");
     QRect rect = gbox->geometry();
     rect.setHeight(25*Global::nvars_used);
     gbox->setGeometry(rect);

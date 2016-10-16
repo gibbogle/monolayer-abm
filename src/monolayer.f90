@@ -149,6 +149,7 @@ t_simulation = 0
 total_dMdt = 0
 chemo(:)%total_flux_prev = 0
 t_lastmediumchange = 0
+medium_change_step = .false.
 limit_stop = .false.
 !Vex_min = 1.0
 !Vex_max = 0
@@ -331,7 +332,7 @@ integer :: i, idrug, imetab, nmetab, im, itestcase, Nmm3, ichemo, itreatment, iu
 integer :: iuse_oxygen, iuse_glucose, iuse_tracer, iuse_drug, iuse_metab, iV_depend, iV_random, iuse_gd_all
 !integer ::  idrug_decay, imetab_decay
 integer :: ictype, idisplay, isconstant, ioxygengrowth, iglucosegrowth, ioxygendeath, iglucosedeath
-integer :: iuse_drop, iconstant, isaveprofiledata, isaveslicedata, iusecellcycle
+integer :: iuse_drop, iconstant, isaveprofiledata, isaveslicedata, iusecellcycle, iuse_lactate, ilactategrowth
 logical :: use_metabolites
 real(REAL_KIND) :: days, bdry_conc, percent, d_n_limit
 real(REAL_KIND) :: sigma(2), DXmm, anoxia_tag_hours, anoxia_death_hours, aglucosia_tag_hours, aglucosia_death_hours
@@ -439,6 +440,21 @@ read(nfcell,*) chemo(GLUCOSE)%max_cell_rate
 chemo(GLUCOSE)%max_cell_rate = chemo(GLUCOSE)%max_cell_rate*1.0e6					! mol/cell/s -> mumol/cell/s
 read(nfcell,*) chemo(GLUCOSE)%MM_C0
 read(nfcell,*) chemo(GLUCOSE)%Hill_N
+
+read(nfcell,*) iuse_lactate		
+read(nfcell,*) ilactategrowth
+chemo(LACTATE)%controls_growth = (ilactategrowth == 1)
+read(nfcell,*) chemo(LACTATE)%diff_coef
+read(nfcell,*) chemo(LACTATE)%medium_diff_coef
+read(nfcell,*) chemo(LACTATE)%membrane_diff_in
+chemo(LACTATE)%membrane_diff_in = chemo(LACTATE)%membrane_diff_in*Vsite_cm3/60	! /min -> /sec
+chemo(LACTATE)%membrane_diff_out = chemo(LACTATE)%membrane_diff_in
+read(nfcell,*) chemo(LACTATE)%bdry_conc
+read(nfcell,*) chemo(LACTATE)%max_cell_rate
+chemo(LACTATE)%max_cell_rate = chemo(LACTATE)%max_cell_rate*1.0e6					! mol/cell/s -> mumol/cell/s
+read(nfcell,*) chemo(LACTATE)%MM_C0
+read(nfcell,*) chemo(LACTATE)%Hill_N
+
 read(nfcell,*) iuse_tracer		!chemo(TRACER)%used
 read(nfcell,*) chemo(TRACER)%diff_coef
 read(nfcell,*) chemo(TRACER)%medium_diff_coef
@@ -502,9 +518,11 @@ read(nfcell,*) spcrad_value
 !read(nfcell,*) saveslice%nt 
 
 read(nfcell,*) Ndrugs_used
+write(nflog,*) 'Ndrugs_used: ',Ndrugs_used
 if (Ndrugs_used > 0) then
     call ReadDrugData(nfcell)
 endif
+write(nflog,*) 'Ndrugs_used: ',Ndrugs_used
 is_radiation = .false.
 if (use_events) then
 	call ReadProtocol(nfcell)
@@ -539,6 +557,8 @@ hypoxia_threshold = hypoxia_threshold/1000			! uM -> mM
 !use_FD = (iuse_FD == 1)
 chemo(OXYGEN)%used = (iuse_oxygen == 1)
 chemo(GLUCOSE)%used = (iuse_glucose == 1)
+chemo(LACTATE)%used = (iuse_lactate == 1)
+chemo(LACTATE)%used = .false.	! TURNED OFF FOR NOW
 chemo(TRACER)%used = (iuse_tracer == 1)
 chemo(OXYGEN)%MM_C0 = chemo(OXYGEN)%MM_C0/1000		! uM -> mM
 chemo(GLUCOSE)%MM_C0 = chemo(GLUCOSE)%MM_C0/1000	! uM -> mM
@@ -596,9 +616,6 @@ test_case = .false.
 if (itestcase /= 0) then
     test_case(itestcase) = .true.
 endif
-
-!if (mod(NX,2) /= 0) NX = NX+1					! ensure that NX is even
-!NYB = NXB
 
 open(nfout,file=outputfile,status='replace')
 write(nfout,'(a,a)') 'GUI version: ',gui_run_version
@@ -778,17 +795,22 @@ allocate(event(2*ntimes))
 kevent = 0
 do itime = 1,ntimes
 	read(nf,'(a)') line
+	write(nflog,'(a)') line
 	if (trim(line) == 'DRUG') then
 		kevent = kevent + 1
 		event(kevent)%etype = DRUG_EVENT
 		read(nf,'(a)') line
+		write(nflog,'(a)') line
 		drugname = trim(line)
+		write(nflog,*) 'ndrugs_used: ',ndrugs_used
 		do idrug = 1,ndrugs_used
+		write(nflog,*) drugname,drug(idrug)%name
 			if (drugname == drug(idrug)%name) then
-				ichemo = 4 + 3*(idrug-1)
+				ichemo = TRACER + 1 + 3*(idrug-1)
 				exit
 			endif
 		enddo
+		write(nflog,*) 'ichemo: ',ichemo
 		! Need to copy drug(idrug) parameters to chemo(ichemo) 
 		call CopyDrugParameters(idrug,ichemo)
 		read(nf,*) t
@@ -1423,6 +1445,7 @@ Caverage(MAX_CHEMO+1:2*MAX_CHEMO) = mass/(total_volume - Vcells)
 chemo(OXYGEN)%bdry_conc = Ce(OXYGEN)
 call SetOxygenLevels
 t_lastmediumchange = istep*DELTA_T
+medium_change_step = .true.
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -1464,7 +1487,7 @@ Caverage(MAX_CHEMO+OXYGEN) = Cex
 end subroutine
 
 !-----------------------------------------------------------------------------------------
-! Advance simulation through one big time step (DELTA_T)
+! Advance simulation through one big time step (DELTA_T) 
 ! The concentration fields are first solved through NT_CONC subdivisions of DELTA_T,
 ! then the cell states are updated, which includes cell death and division.
 ! On either death or division cell positions are adjusted, and site concentrations
@@ -1478,8 +1501,9 @@ integer :: kcell, site(3), hour, nthour, kpar=0
 real(REAL_KIND) :: r(3), rmax, tstart, dt, radiation_dose, diam_um, framp, tnow, area, diam
 !integer, parameter :: NT_CONC = 6
 integer :: i, ic, ichemo, ndt, iz, idrug
-integer :: nvars, ns
+integer :: nvars, ns, idiv, ndiv
 real(REAL_KIND) :: dxc, ex_conc(120*O2_BY_VOL+1)		! just for testing
+real(REAL_KIND) :: DELTA_T_save, t_sim_0
 logical :: ok = .true.
 logical :: dbug
 
@@ -1534,10 +1558,21 @@ endif
 
 drug_gt_cthreshold = .false.
 
+if (medium_change_step) then
+	ndiv = 6
+else
+	ndiv = 1
+endif
+DELTA_T_save = DELTA_T
+DELTA_T = DELTA_T/ndiv
+t_sim_0 = t_simulation
+do idiv = 0,ndiv-1
+t_simulation = t_sim_0 + idiv*DELTA_T
+
 if (dbug) write(nflog,*) 'Solver'
 do it_solve = 1,NT_CONC
 	tstart = (it_solve-1)*dt
-	t_simulation = (istep-1)*DELTA_T + tstart
+	t_simulation = t_simulation + (it_solve-1)*dt
 	call Solver(it_solve,tstart,dt,Ncells,ok)
 	if (.not.ok) then
 		res = 5
@@ -1549,6 +1584,13 @@ enddo
 !write(nflog,*) 'did Solver'
 call CheckDrugConcs
 call CheckDrugPresence
+
+enddo
+DELTA_T = DELTA_T_save
+medium_change_step = .false.
+
+!write(nfout,'(i6,f8.2,7e12.3)') istep,istep/real(nthour),Caverage(1),Caverage(5:7), &
+!	Caverage(MAX_CHEMO+5:MAX_CHEMO+7)
 
 res = 0
 

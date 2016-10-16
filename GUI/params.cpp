@@ -269,13 +269,49 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
  "Max consumption rate",
  "GLUCOSE consumption rate"},
 
-{"GLUCOSE_MM_KM", 1.33, 0, 0,
+{"GLUCOSE_MM_KM", 220, 0, 0,
  "Michaelis-Menten Km",
  "Michaelis-Menten Km (uM)"},
 
 {"GLUCOSE_HILL_N", 1, 1, 2,
  "Hill function N",
  "Glucose uptake rate Hill function N"},
+
+    {"USE_LACTATE", 1, 0, 1,
+    "Use Lactate?",
+    "Lactate is simulated"},
+
+    {"LACTATE_GROWTH", 1, 0, 1,
+    "Lactate growth?",
+    "The rate of growth of a cell is the maximum rate multiplied by the fractional rates of metabolism of both O2 and glucose, or something"},
+
+    {"LACTATE_DIFF_COEF", 3.0e-7, 0, 0,
+     "Spheroid diffusion coeff",
+     "LACTATE diffusion coefficient"},
+
+    {"LACTATE_MEDIUM_DIFF", 6.0e-6, 0, 0,
+     "Medium diffusion coeff",
+     "Constituent diffusion coefficient in the medium"},
+
+    {"LACTATE_CELL_DIFF", 100, 0, 0,
+     "Membrane diff constant",
+     "Cell membrane diffusion coefficient Kd"},
+
+    {"LACTATE_BDRY_CONC", 3, 0, 0,
+     "Boundary concentration",
+     "LACTATE boundary concentration"},
+
+    {"LACTATE_CONSUMPTION", 3.8e-17, 0, 0,
+     "Max consumption rate",
+     "LACTATE consumption rate"},
+
+    {"LACTATE_MM_KM", 220, 0, 0,
+     "Michaelis-Menten Km",
+     "Michaelis-Menten Km (uM)"},
+
+    {"LACTATE_HILL_N", 1, 1, 2,
+     "Hill function N",
+     "Lactate uptake rate Hill function N"},
 
 {"USE_TRACER", 0, 0, 1,
 "Use Tracer?",
