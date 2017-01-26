@@ -79,7 +79,7 @@ padding: 8px
            <enum>QTabWidget::West</enum>
           </property>
           <property name="currentIndex">
-           <number>6</number>
+           <number>5</number>
           </property>
           <property name="elideMode">
            <enum>Qt::ElideNone</enum>
@@ -1666,6 +1666,9 @@ padding: 8px
             <string>Treatment</string>
            </attribute>
            <widget class="QGroupBox" name="groupBox_radiation_LQ">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
             <property name="geometry">
              <rect>
               <x>120</x>
@@ -6495,7 +6498,7 @@ padding: 8px
              <rect>
               <x>10</x>
               <y>20</y>
-              <width>601</width>
+              <width>851</width>
               <height>451</height>
              </rect>
             </property>
@@ -6526,7 +6529,7 @@ padding: 8px
            <widget class="QLabel" name="alabel_mins">
             <property name="geometry">
              <rect>
-              <x>950</x>
+              <x>1080</x>
               <y>290</y>
               <width>21</width>
               <height>16</height>
@@ -6539,7 +6542,7 @@ padding: 8px
            <widget class="QLabel" name="alabel_nbins">
             <property name="geometry">
              <rect>
-              <x>810</x>
+              <x>940</x>
               <y>250</y>
               <width>131</width>
               <height>21</height>
@@ -6552,7 +6555,7 @@ padding: 8px
            <widget class="QLabel" name="alabel_summary_interval">
             <property name="geometry">
              <rect>
-              <x>815</x>
+              <x>945</x>
               <y>290</y>
               <width>101</width>
               <height>20</height>
@@ -6565,7 +6568,7 @@ padding: 8px
            <widget class="QLineEdit" name="lineEdit_summary_interval">
             <property name="geometry">
              <rect>
-              <x>910</x>
+              <x>1040</x>
               <y>290</y>
               <width>31</width>
               <height>16</height>
@@ -6581,7 +6584,7 @@ padding: 8px
            <widget class="QLineEdit" name="lineEdit_nhistobins">
             <property name="geometry">
              <rect>
-              <x>940</x>
+              <x>1070</x>
               <y>250</y>
               <width>21</width>
               <height>20</height>
@@ -6589,6 +6592,25 @@ padding: 8px
             </property>
             <property name="text">
              <string>20</string>
+            </property>
+           </widget>
+           <widget class="QLabel" name="alabel_profileplots">
+            <property name="geometry">
+             <rect>
+              <x>650</x>
+              <y>0</y>
+              <width>81</width>
+              <height>21</height>
+             </rect>
+            </property>
+            <property name="font">
+             <font>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Profile Plots</string>
             </property>
            </widget>
           </widget>
@@ -7931,6 +7953,19 @@ padding: 8px
             </property>
             <property name="text">
              <string>Colony growth period (days)</string>
+            </property>
+           </widget>
+           <widget class="QMyCheckBox" name="cbox_FULLY_MIXED">
+            <property name="geometry">
+             <rect>
+              <x>390</x>
+              <y>390</y>
+              <width>91</width>
+              <height>18</height>
+             </rect>
+            </property>
+            <property name="text">
+             <string>Fully mixed?</string>
             </property>
            </widget>
           </widget>

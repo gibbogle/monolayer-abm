@@ -2224,7 +2224,8 @@ void MainWindow::showSummary(int hr)
         if (!grph->isActive(i)) continue;
 		int k = grph->get_dataIndex(i);
         val = Global::summaryData[k];
-        newR->pData[i][step] = val*grph->get_scaling(i);
+//        newR->pData[i][step] = val*grph->get_scaling(i);
+        newR->pData[i][step] = val;
         tag = grph->get_tag(i);
         double yscale = grph->get_yscale(i);
         pGraph[i]->redraw(newR->tnow, newR->pData[i], step+1, Global::casename, tag, yscale, false);
@@ -2242,23 +2243,31 @@ void MainWindow::showSummary(int hr)
 //--------------------------------------------------------------------------------------------------------
 void MainWindow::updateProfilePlots()
 {
+//    LOG_MSG("updateProfilePlots");
     if (Global::casename == "") return;
     int ivar = 0;
     for (int i=0; i<nGraphs; i++) {
+//        sprintf(msg,"i: %d",i);
+//        LOG_MSG(msg);
         if (!grph->isActive(i)) continue;
+//        sprintf(msg,"isActive: isProfile: %d conc_nc_ex: %d",grph->isProfile(i),Global::conc_nc_ex);
+//        LOG_MSG(msg);
         if (Global::conc_nc_ex > 0 && grph->isProfile(i)) {
             int nc;
             double x[100], y[100], dx;
             double xscale, yscale;
             QString tag = grph->get_tag(i);
-            bool IC = tag.contains("IC_");
-            if (IC) {
-                nc = Global::conc_nc_ex;
-                dx = Global:: conc_dx_ex;
-            } else {
-                nc = Global::conc_nc_ic;
-                dx = Global:: conc_dx_ic;
-            }
+//            bool IC = tag.contains("IC_");    // THIS LOOKS LIKE AN ERROR
+//            if (IC) {
+//                nc = Global::conc_nc_ex;
+//                dx = Global:: conc_dx_ex;
+//            } else {
+//                nc = Global::conc_nc_ic;
+//                dx = Global:: conc_dx_ic;
+//            }
+            bool IC = false;
+            nc = Global::conc_nc_ex;
+            dx = Global:: conc_dx_ex;
             int k = grph->get_dataIndex(i);
             if (k == MULTI) {
                 if (IC) {
@@ -2720,7 +2729,7 @@ void MainWindow::changeParam()
                 bool ch = checkBox->isChecked();
                 groupBox_cellcycle->setEnabled(ch);
                 groupBox_radiation_RMR->setEnabled(ch);
-//                groupBox_radiation_LQ->setEnabled(!ch);
+                groupBox_radiation_LQ->setEnabled(!ch);
                 qwtPlot_DIVIDE_TIME_1->setEnabled(!ch);
                 qwtPlot_DIVIDE_TIME_2->setEnabled(!ch);
                 groupBox_volumemethod->setEnabled(!ch);
@@ -3280,20 +3289,23 @@ void MainWindow::setupCellColours()
 void MainWindow::setupGraphSelector()
 {
     QGridLayout *grid = new QGridLayout;
-    int row[3];
+    int row[4];
     int col;
-    row[0] = row[1] = row[2] = -1;
+    row[0] = row[1] = row[2] = row[3] = -1;
 
     cbox_ts = new QMyCheckBox*[grph->n_tsGraphs];
     for (int i=0; i<grph->n_tsGraphs; i++) {
         int itype = grph->tsGraphs[i].type;
         if (itype == 0) {
-            if (i < 16)
+            if (i < 16) {
                 col = 0;
-            else
+            } else if (i < 32) {
                 col = 1;
+            } else {
+                col = 2;
+            }
         } else {
-            col = 2;
+            col = 3;
         }
         row[col]++;
         QString text = grph->tsGraphs[i].title;

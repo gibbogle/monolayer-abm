@@ -239,6 +239,12 @@ nlist0 = nlist
 do kcell = 1,nlist
     cp => cell_list(kcell)
 	if (cp%state == DEAD) cycle
+!	if (istep > 300) then
+!		if (cp%drug_tag(1)) then
+!			write(*,*) 'drug_tag: ',kcell
+!			stop
+!		endif
+!	endif
 	ityp = cp%celltype
 	call getO2conc(cp,C_O2)
 	if (cp%anoxia_tag) then
@@ -285,8 +291,10 @@ do kcell = 1,nlist
 	endif
 	
 	do idrug = 1,ndrugs_used	
+		ichemo = DRUG_A + 3*(idrug-1)
+		if (.not.chemo(ichemo)%present) cycle
+		if (cp%drug_tag(idrug)) cycle	! don't tag more than once
 		dp => drug(idrug)
-		ichemo = TRACER + 1 + 3*(idrug-1)	
 		kill_prob = 0
 		death_prob = 0
 		survival_prob = 1
@@ -302,13 +310,9 @@ do kcell = 1,nlist
 !			kill_prob = kill_prob + dkill_prob
 			survival_prob = survival_prob*(1 - dkill_prob)
 			death_prob = max(death_prob,dp%death_prob(ityp,im))
-!			if (istep == 362 .and. kcell == 1) then
-!				write(nfout,'(4i4,7e11.3)') istep,kcell,ityp,im,n_O2,Kd,dp%C2(ityp,im),dp%KO2(ityp,im),dp%Kmet0(ityp,im),Cdrug,C_O2
-!				write(nfout,'(4e12.3)') kmet,dMdt,dkill_prob,kill_prob
-!			endif
 		enddo
 		kill_prob = 1 - survival_prob
-	    if (.not.cp%drug_tag(idrug) .and. par_uni(kpar) < kill_prob) then		! don't tag more than once
+	    if (par_uni(kpar) < kill_prob) then		
 			cp%p_drug_death(idrug) = death_prob
 			cp%drug_tag(idrug) = .true.
             Ndrug_tag(idrug,ityp) = Ndrug_tag(idrug,ityp) + 1
@@ -465,6 +469,7 @@ nlist0 = nlist
 ndivide = 0
 !tnow = istep*DELTA_T !+ t_fmover
 !if (colony_simulation) write(*,*) 'grower: ',nlist0,use_volume_method,tnow
+
 do kcell = 1,nlist0
 	kcell_now = kcell
 	if (colony_simulation) then
@@ -485,27 +490,42 @@ do kcell = 1,nlist0
 	    if (cp%Iphase) then
 		    call growcell(cp,dt)
 		    if (cp%V > cp%divide_volume) then	! time to enter mitosis
-    	        mitosis_entry = .true.
+ !   	        mitosis_entry = .true.
+				cp%Iphase = .false.
+				in_mitosis = .true.
+				cp%mitosis = 0
+				cp%t_start_mitosis = tnow
 	        endif
 	    else
 	        in_mitosis = .true.
 	    endif
 	else
 	    prev_phase = cp%phase
+!	    if (cp%dVdt == 0) then
+!			write(nflog,*) 'dVdt=0: kcell, phase: ',kcell,cp%phase
+!		endif
         call timestep(cp, ccp, dt)
         if (cp%phase >= M_phase) then
             if (prev_phase == Checkpoint2) then
-                mitosis_entry = .true.
-            else
-                in_mitosis = .true.
+!                mitosis_entry = .true.
+!				write(*,*) 'mitosis_entry: ',kcell,cp%drug_tag(1)
+				cp%Iphase = .false.
+				cp%mitosis = 0
+				cp%t_start_mitosis = tnow
+	            in_mitosis = .true.
+!            else
+!                in_mitosis = .true.
             endif
+            in_mitosis = .true.
         endif
 		if (cp%phase < Checkpoint2 .and. cp%phase /= Checkpoint1) then
 		    call growcell(cp,dt)
 		endif	
 	endif
-	if (mitosis_entry) then
+!	if (mitosis_entry) then
+	if (in_mitosis) then
 		drugkilled = .false.
+!		write(*,*) 'mitosis_entry: ',kcell,cp%drug_tag(1)
 		do idrug = 1,ndrugs_used
 			if (cp%drug_tag(idrug)) then
 				call CellDies(kcell)
@@ -555,11 +575,10 @@ do kcell = 1,nlist0
 			endif		        
 		endif
 		
-		cp%Iphase = .false.
-		cp%mitosis = 0
-		cp%t_start_mitosis = tnow
-!		ncells_mphase = ncells_mphase + 1
-	elseif (in_mitosis) then
+!		cp%Iphase = .false.
+!		cp%mitosis = 0
+!		cp%t_start_mitosis = tnow
+!	elseif (in_mitosis) then
 		cp%mitosis = (tnow - cp%t_start_mitosis)/mitosis_duration
         if (cp%mitosis >= 1) then
 			divide = .true.
@@ -728,6 +747,7 @@ type(cycle_parameters_type), pointer :: ccp
 !write(logmsg,*) 'divider: ',kcell1 
 !call logger(logmsg)
 ok = .true.
+ndivided = ndivided + 1
 !tnow = istep*DELTA_T
 ccp => cc_parameters
 if (colony_simulation) then
@@ -770,6 +790,10 @@ cfse0 = cp1%CFSE
 cp1%CFSE = generate_CFSE(cfse0/2)
 cfse2 = cfse0 - cp1%CFSE
 
+if (cp1%drug_tag(1)) then
+	write(*,*) 'Error: divider: drug_tagged: ',kcell1
+	stop
+endif
 cp1%drug_tag = .false.
 cp1%anoxia_tag = .false.
 cp1%t_anoxia = 0

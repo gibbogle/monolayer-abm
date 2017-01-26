@@ -19,6 +19,7 @@ contains
 ! outfile = file to hold the output
 !-----------------------------------------------------------------------------------------
 subroutine Setup(ncpu,infile,outfile,ok)
+!DEC$ ATTRIBUTES DLLEXPORT :: setup
 integer :: ncpu
 character*(*) :: infile, outfile
 logical :: ok
@@ -186,12 +187,33 @@ end subroutine
 !-----------------------------------------------------------------------------------------
 subroutine SetupMedium(ichemo)
 integer :: ichemo
+integer :: idrug, im
 
 if (chemo(ichemo)%present) then
     Caverage(MAX_CHEMO+ichemo) = chemo(ichemo)%bdry_conc
 else
     Caverage(MAX_CHEMO+ichemo) = 0
 endif
+!if (ichemo == GLUCOSE) then
+!	CglucoseMedium = chemo(ichemo)%bdry_conc
+!endif
+!if (ichemo >= DRUG_A) then
+!	if (ichemo < DRUG_B) then
+!		idrug = 1
+!	else
+!		idrug = 2
+!	endif
+!	im = ichemo - (DRUG_A + 3*(idrug-1))
+!	CdrugMedium(idrug,im,:) = 0
+!endif
+if (ichemo == GLUCOSE) then
+	chemo(ichemo)%Cmedium = chemo(ichemo)%bdry_conc
+endif
+if (ichemo >= DRUG_A) then
+	chemo(ichemo)%Cmedium = 0
+endif
+
+!write(*,*) 'SetupMedium: ',Caverage(MAX_CHEMO + GLUCOSE)
 end subroutine
 
 !----------------------------------------------------------------------------------------- 
@@ -333,6 +355,7 @@ integer :: iuse_oxygen, iuse_glucose, iuse_tracer, iuse_drug, iuse_metab, iV_dep
 !integer ::  idrug_decay, imetab_decay
 integer :: ictype, idisplay, isconstant, ioxygengrowth, iglucosegrowth, ioxygendeath, iglucosedeath
 integer :: iuse_drop, iconstant, isaveprofiledata, isaveslicedata, iusecellcycle, iuse_lactate, ilactategrowth
+integer :: ifullymixed
 logical :: use_metabolites
 real(REAL_KIND) :: days, bdry_conc, percent, d_n_limit
 real(REAL_KIND) :: sigma(2), DXmm, anoxia_tag_hours, anoxia_death_hours, aglucosia_tag_hours, aglucosia_death_hours
@@ -383,6 +406,8 @@ read(nfcell,*) NT_CONC						! number of subdivisions of DELTA_T for diffusion co
 read(nfcell,*) Vcell_pL                     ! nominal cell volume in pL
 read(nfcell,*) well_area                    ! well bottom area (cm^2)
 read(nfcell,*) medium_volume0				! initial total volume (cm^3)
+read(nfcell,*) ifullymixed					! medium is fully mixed
+fully_mixed = (ifullymixed == 1)
 read(nfcell,*) Vdivide0						! nominal cell volume multiple for division
 read(nfcell,*) dVdivide						! variation about nominal divide volume
 read(nfcell,*) MM_THRESHOLD					! O2 concentration threshold Michaelis-Menten "soft-landing" (uM)
@@ -516,7 +541,7 @@ read(nfcell,*) spcrad_value
 !read(nfcell,*) saveslice%filebase
 !read(nfcell,*) saveslice%dt
 !read(nfcell,*) saveslice%nt 
-
+write(nflog,*) 'spcrad_value: ',spcrad_value
 read(nfcell,*) Ndrugs_used
 write(nflog,*) 'Ndrugs_used: ',Ndrugs_used
 if (Ndrugs_used > 0) then
@@ -535,6 +560,19 @@ if (is_radiation) then
 endif
 
 close(nfcell)
+
+if (celltype_fraction(1) == 1.0) then
+	write(nflog,*) 'Type 1 cells'
+	selected_celltype = 1
+elseif (celltype_fraction(2) == 1.0) then
+	write(nflog,*) 'Type 2 cells'
+	selected_celltype = 2
+else
+	write(logmsg,*) 'Error: cells must all be of the same type'
+	call logger(logmsg)
+	ok = .false.
+	return
+endif
 
 if (chemo(OXYGEN)%Hill_N /= 1 .and. chemo(OXYGEN)%Hill_N /= 2) then
 	call logger('Error: OXYGEN_HILL_N must be 1 or 2')
@@ -641,8 +679,10 @@ f_hypox(1) f_hypox(2) f_hypox(3) &
 f_clonohypox(1) f_clonohypox(2) f_clonohypox(3) &
 f_growth(1) f_growth(2) f_growth(3) &
 plating_efficiency(1) plating_efficiency(2) &
-medium_oxygen medium_glucose medium_drugA medium_drugB &
-doubling_time'
+EC_oxygen EC_glucose EC_drugA EC_drugA_met1 EC_drugA_met2 EC_drugB EC_drugB_met1 EC_drugB_met2 &
+IC_oxygen IC_glucose IC_drugA IC_drugA_met1 IC_drugA_met2 IC_drugB IC_drugB_met1 IC_drugB_met2 &
+medium_oxygen medium_glucose medium_drugA medium_drugA_met1 medium_drugA_met2 medium_drugB medium_drugB_met1 medium_drugB_met2 &
+doubling_time Ndivided'
 
 write(logmsg,*) 'Opened nfout: ',outputfile
 call logger(logmsg)
@@ -652,6 +692,7 @@ write(logmsg,'(a,2i6,f6.0)') 'nsteps, NT_CONC, DELTA_T: ',nsteps,NT_CONC,DELTA_T
 call logger(logmsg)
 
 call DetermineKd	! Kd is now set or computed in the GUI 
+ndivided = 0
 ok = .true.
 
 end subroutine
@@ -777,12 +818,12 @@ character*(1)  :: numstr
 real(REAL_KIND) :: t, dt, vol, conc, O2conc, O2flush, dose, O2medium
 type(event_type) :: E
 
-write(logmsg,*) 'ReadProtocol'
+write(logmsg,*) 'ReadProtocol:'
 call logger(logmsg)
 chemo(TRACER+1:)%used = .false.
 do
 	read(nf,'(a)') line
-	if (trim(line) == 'PROTOCOL') exit
+	if (line == 'PROTOCOL') exit
 enddo
 read(nf,*) ntimes
 if (ntimes == 0) then
@@ -1297,7 +1338,7 @@ type(event_type) :: E
 do kevent = 1,Nevents
 	E = event(kevent)
 	if (t_simulation >= E%time .and. .not.E%done) then
-		write(nflog,'(a,i3,2f8.0,i3,2f10.4)') 'Event: ',E%etype,t_simulation,E%time,E%ichemo,E%volume,E%conc
+		write(nflog,'(a,i6,i3,2f8.0,i3,2f10.4)') 'Event: ',istep,E%etype,t_simulation,E%time,E%ichemo,E%volume,E%conc
 		if (E%etype == RADIATION_EVENT) then
 			radiation_dose = E%dose
 			write(logmsg,'(a,f8.0,f8.3)') 'RADIATION_EVENT: time, dose: ',t_simulation,E%dose
@@ -1422,7 +1463,7 @@ end subroutine
 subroutine MediumChange(Ve,Ce)
 real(REAL_KIND) :: Ve, Ce(:)
 real(REAL_KIND) :: R, Vm, Vr, Vcells, mass(MAX_CHEMO)
-integer :: ichemo
+integer :: ichemo, idrug, im, iparent
 
 write(nflog,*) 'MediumChange:'
 write(nflog,'(a,f8.4)') 'Ve: ',Ve
@@ -1444,6 +1485,16 @@ Caverage(MAX_CHEMO+1:2*MAX_CHEMO) = mass/(total_volume - Vcells)
 !write(nflog,'(a,13f8.4)') 'medium_Cext ',chemo(OXYGEN+1:)%medium_Cext
 chemo(OXYGEN)%bdry_conc = Ce(OXYGEN)
 call SetOxygenLevels
+!CglucoseMedium = Caverage(MAX_CHEMO+GLUCOSE)
+chemo(GLUCOSE)%Cmedium = Caverage(MAX_CHEMO+GLUCOSE)
+do idrug = 1,2
+	iparent = DRUG_A + 3*(idrug-1)
+	do im = 0,2
+		ichemo = iparent + im	
+		chemo(ichemo)%Cmedium = Caverage(MAX_CHEMO+ichemo)
+!		Cdrug(im,:) = Caverage(MAX_CHEMO+DRUG_A+im)
+	enddo
+enddo
 t_lastmediumchange = istep*DELTA_T
 medium_change_step = .true.
 end subroutine
@@ -1454,14 +1505,17 @@ end subroutine
 ! flux that corresponds to the area, Kdiff and concentration gradient (Cbnd - Cex)/depth.
 ! Kd.A.(Cbnd - Cex)/d = Ncells.(Kin.Cex - Kout.Cin)
 ! => Cex = (A.Kd.Cbnd/d + Ncells.Kout.Cin)/(A.Kd/d + Ncells.Kin) 
+! The O2 gradient is assumed to be linear = (Cbnd - Cex)/d, therefore:
+! average O2 concentration = (Cbnd + Cex)/2
 !-----------------------------------------------------------------------------------------
 subroutine SetOxygenLevels
 integer :: ichemo, k
-real(REAL_KIND) :: Kin, Kout, Kd, Cex, Cin, Cbnd, A, d, flux, Cin_prev
+real(REAL_KIND) :: Kin, Kout, Kd, Cex, Cin, Cbnd, A, d, flux, Cin_prev, alpha
 real(REAL_KIND) :: tol = 1.0e-6
 
 ichemo = OXYGEN
-if (chemo(ichemo)%constant) then
+
+if (chemo(ichemo)%constant .or. fully_mixed) then
     Cex = chemo(ichemo)%bdry_conc
     Cin = getCin(ichemo,Cex)
 else
@@ -1484,6 +1538,10 @@ else
 endif
 Caverage(OXYGEN) = Cin
 Caverage(MAX_CHEMO+OXYGEN) = Cex
+do k = 1,N1D
+	alpha = real(k-1)/(N1D-1)
+	chemo(OXYGEN)%Cmedium(k) = alpha*chemo(ichemo)%bdry_conc + (1-alpha)*Cex
+enddo
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -1509,6 +1567,7 @@ logical :: dbug
 
 !write(*,'(a,f8.3)') 'simulate_step: time: ',wtime()-start_wtime
 !write(nflog,'(a,f8.3)') 'simulate_step: time: ',wtime()-start_wtime
+!write(nflog,*) 'istep: ',istep
 dbug = .false.
 if (Ncells == 0) then
 	call logger('Ncells = 0')
@@ -1535,26 +1594,27 @@ endif
 
 bdry_debug = (istep >= 250000)
 
-istep = istep + 1
-t_simulation = (istep-1)*DELTA_T	! seconds
-radiation_dose = 0
-if (use_treatment) then     ! now we use events
-	call treatment(radiation_dose)
-endif
-if (use_events) then
-	call ProcessEvent(radiation_dose)
-endif
-if (radiation_dose > 0) then
-	write(logmsg,'(a,f6.1)') 'Radiation dose: ',radiation_dose
-	call logger(logmsg)
-endif
-if (dbug) write(nflog,*) 'GrowCells'
-call GrowCells(radiation_dose,DELTA_T,ok)
-if (dbug) write(nflog,*) 'did GrowCells'
-if (.not.ok) then
-	res = 3
-	return
-endif
+!istep = istep + 1
+!!t_simulation = (istep-1)*DELTA_T	! seconds
+!t_simulation = istep*DELTA_T	! seconds
+!radiation_dose = 0
+!if (use_treatment) then     ! now we use events
+!	call treatment(radiation_dose)
+!endif
+!if (use_events) then
+!	call ProcessEvent(radiation_dose)
+!endif
+!if (radiation_dose > 0) then
+!	write(logmsg,'(a,f6.1)') 'Radiation dose: ',radiation_dose
+!	call logger(logmsg)
+!endif
+!if (dbug) write(nflog,*) 'GrowCells'
+!call GrowCells(radiation_dose,DELTA_T,ok)
+!if (dbug) write(nflog,*) 'did GrowCells'
+!if (.not.ok) then
+!	res = 3
+!	return
+!endif
 
 drug_gt_cthreshold = .false.
 
@@ -1580,6 +1640,7 @@ do it_solve = 1,NT_CONC
 	endif
 	! Set O2 levels
     call SetOxygenLevels
+	if (.not.fully_mixed) call SolveMediumGlucose(dt)
 enddo
 !write(nflog,*) 'did Solver'
 call CheckDrugConcs
@@ -1588,6 +1649,29 @@ call CheckDrugPresence
 enddo
 DELTA_T = DELTA_T_save
 medium_change_step = .false.
+
+istep = istep + 1
+!t_simulation = (istep-1)*DELTA_T	! seconds
+t_simulation = istep*DELTA_T	! seconds
+radiation_dose = 0
+if (use_treatment) then     ! now we use events
+	call treatment(radiation_dose)
+endif
+if (use_events) then
+	call ProcessEvent(radiation_dose)
+endif
+if (radiation_dose > 0) then
+	write(logmsg,'(a,f6.1)') 'Radiation dose: ',radiation_dose
+	call logger(logmsg)
+endif
+if (dbug) write(nflog,*) 'GrowCells'
+call GrowCells(radiation_dose,DELTA_T,ok)
+if (dbug) write(nflog,*) 'did GrowCells'
+if (.not.ok) then
+	res = 3
+	return
+endif
+
 
 !write(nfout,'(i6,f8.2,7e12.3)') istep,istep/real(nthour),Caverage(1),Caverage(5:7), &
 !	Caverage(MAX_CHEMO+5:MAX_CHEMO+7)
@@ -1601,11 +1685,13 @@ res = 0
 
 if (dbug .or. mod(istep,nthour) == 0) then
 	write(logmsg,'(a,2i6,a,3i8)') &
-		'istep, hour: ',istep,istep/nthour,' nlist, ncells, nchemo: ',nlist,ncells,nchemo
+		'istep, hour: ',istep,istep/nthour,' nlist, ncells, ndrug_tag: ',nlist,ncells,ndrug_tag(1,1)
 	call logger(logmsg)
 !	call showcells
 endif
 ! write(nflog,'(a,f8.3)') 'did simulate_step: time: ',wtime()-start_wtime
+
+!call showcell(39)
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -1615,8 +1701,8 @@ integer :: kcell
 type(cell_type), pointer :: cp
 
 cp => cell_list(kcell)
-write(nflog,'(a,i6,4e12.3)') 'kcell, volume, divide_volume, dVdt, divide_time: ', &
-                kcell, cp%V, cp%divide_volume, cp%dVdt, cp%divide_time
+write(nflog,'(a,2i6,6e12.3)') 'kcell, phase, volume, divide_volume, dVdt, divide_time: ', &
+                kcell, cp%phase, cp%V, cp%divide_volume, cp%dVdt, cp%divide_time,tnow,cp%G2_time
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -1909,5 +1995,6 @@ if (par_zig_init) then
 endif
 call logger('freed par_zig')
 end subroutine
+
 
 end module

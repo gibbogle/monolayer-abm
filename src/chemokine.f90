@@ -18,6 +18,8 @@ implicit none
 !end type
 !type(receptor_type), target :: receptor(MAX_RECEPTOR)
 
+integer, parameter :: N1D = 20
+
 type chemokine_type
 	character(24) :: name
 	logical :: used
@@ -53,6 +55,7 @@ type chemokine_type
 !	real(REAL_KIND), allocatable :: Cprev_b(:,:,:)
 !	real(REAL_KIND), allocatable :: Fprev_b(:,:,:)
 !	real(REAL_KIND), allocatable :: Fcurr_b(:,:,:)
+	real(REAL_KIND) :: Cmedium(N1D)
 end type
 type(chemokine_type), target :: chemo(MAX_CHEMO)
 
@@ -78,7 +81,10 @@ end type
 type(ODEdiff_type) :: ODEdiff
 
 integer :: nchemo, chemomap(MAX_CHEMO)
-real(REAL_KIND) :: Caverage(2*MAX_CHEMO)    ! average cell and average medium concs
+real(REAL_KIND) :: Caverage(2*MAX_CHEMO)    ! average IC and EC concs
+real(REAL_KIND) :: Cmediumave(MAX_CHEMO)    ! average medium concentrations
+real(REAL_KIND) :: CglucoseMedium(N1D)
+real(REAL_KIND) :: CdrugMedium(2,0:2,N1D)
 
 contains
 
@@ -121,6 +127,8 @@ chemo(TRACER)%name = 'Tracer'
 chemo(OXYGEN)%decay_rate = 0
 chemo(GLUCOSE)%decay_rate = 0
 chemo(TRACER)%decay_rate = 0
+
+Caverage = 0
 
 do ichemo = 1,MAX_CHEMO
 	chemo(ichemo)%present = .false.
@@ -376,6 +384,7 @@ else
 	glucose_metab = 0
 endif
 end function
+
 
 
 end module

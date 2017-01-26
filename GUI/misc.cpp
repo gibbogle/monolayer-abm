@@ -241,11 +241,10 @@ void ExecThread::run()
         if (i%summary_interval == 0) {
             mutex1.lock();
             get_summary(Global::summaryData, &Global::i_hypoxia_cutoff, &Global::i_growth_cutoff);
-//            getProfiles();
 //            get_volprob(&Global::vol_nv, &Global::vol_v0, &Global::vol_dv, Global::volProb);
 //            get_oxyprob(&Global::oxy_nv, &Global::oxy_v0, &Global::oxy_dv, Global::oxyProb);
 //            get_distdata(&Global::dist_nv, Global::distParams, Global::distData);
-//            get_concdata(&Global::conc_nvars, &Global::conc_nc_ex, &Global::conc_dx_ex, Global::concData);
+            get_concdata(&Global::conc_nvars, &Global::conc_nc_ex, &Global::conc_dx_ex, Global::concData);
 //            get_ic_concdata(&Global::conc_nvars, &Global::conc_nc_ic, &Global::conc_dx_ic, Global::IC_concData);
             if (Global::showingFACS || Global::recordingFACS) {
                 getFACS();
@@ -320,36 +319,6 @@ void ExecThread::snapshot()
     mutex2.unlock();
     emit display(); // Emit signal to update VTK display
 }
-
-//-----------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------
-void ExecThread::getProfiles()
-{
-    int k;
-
-//    k = PROFILE_OXYGEN;
-//    get_profile_oxygen(Global::profile_x[k],Global::profile_y[k],&Global::profile_n[k]);
-
-//    k = PROFILE_S1PR1;
-//    get_profile_s1pr1(profile_x[k],profile_y[k],&profile_n[k]);
-//    k = PROFILE_CFSE;
-//    get_profile_cfse(profile_x[k],profile_y[k],&profile_n[k]);
-//    k = PROFILE_STIM;
-//    get_profile_stim(profile_x[k],profile_y[k],&profile_n[k]);
-//    k = PROFILE_STIMRATE;
-//    get_profile_stimrate(profile_x[k],profile_y[k],&profile_n[k]);
-//    k = PROFILE_AVIDITY_LN;
-//    get_profile_avidity_ln(profile_x[k],profile_y[k],&profile_n[k]);
-//    k = PROFILE_AVIDITY_PER;
-//    get_profile_avidity_per(profile_x[k],profile_y[k],&profile_n[k]);
-//    k = PROFILE_GENERATION_LN;
-//    get_profile_generation_ln(profile_x[k],profile_y[k],&profile_n[k]);
-//    k = PROFILE_FIRSTDCCONTACTTIME;
-//    get_profile_firstdccontacttime(profile_x[k],profile_y[k],&profile_n[k]);
-//    k = PROFILE_DCBINDTIME;
-//    get_profile_dcbindtime(profile_x[k],profile_y[k],&profile_n[k]);
-}
-
 
 //-----------------------------------------------------------------------------------------
 // Get FACS data and histogram data

@@ -116,41 +116,162 @@ GRAPH_SET tsGraphSet[] = {
      "Plating efficiency = 100*(number of viable cells)/(number of live cells)",
     15, true, 0, 0.1, 0, TS_TYPE},
 
-//    {"cellspermm3",
-//     "Cells/mm3",
-//     "Density",
-//     "Number of live cells per mm3 in the blob",
-//    19, true, 0, 1, 0, TS_TYPE},
-
-    {"mediumoxygen",
-    "Ave Medium Oxygen",
+    {"ECoxygen",
+    "EC Oxygen",
     "Concentration",
-     "Average concentration of oxygen in the medium (far-field)",
+    "Concentration of oxygen in the medium at the well bottom",
     16, true, 0, 0.001, 0, TS_TYPE},
 
-    {"mediumglucose",
-    "Ave Medium Glucose",
+    {"ECglucose",
+    "EC Glucose",
     "Concentration",
-     "Average concentration of glucose in the medium (far-field)",
+     "Concentration of glucose in the medium at the well bottom",
     17, true, 0, 0.001, 0, TS_TYPE},
 
-    {"mediumdrugA",
-    "Ave Medium Drug A",
+    {"ECdrugA",
+    "EC Drug A",
     "Concentration",
-     "Average concentration of drug A in the medium (far-field)",
+     "Concentration of Drug A in the medium at the well bottom",
     18, true, 0, 0.001, 0, TS_TYPE},
 
-    {"mediumdrugB",
-    "Ave Medium Drug B",
+    {"ECdrugAmet1",
+    "EC Drug A metab1",
     "Concentration",
-    "Average concentration of drug B in the medium (far-field)",
+     "Concentration of Drug A metabolite 1 in the medium at the well bottom",
     19, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ECdrugAmet2",
+    "EC Drug A metab2",
+    "Concentration",
+     "Concentration of Drug A metabolite 2 in the medium at the well bottom",
+    20, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ECdrugB",
+    "EC Drug B",
+    "Concentration",
+     "Concentration of Drug B in the medium at the well bottom",
+    21, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ECdrugBmet1",
+    "EC Drug B metab1",
+    "Concentration",
+     "Concentration of Drug B metabolite 1 in the medium at the well bottom",
+    22, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ECdrugBmet2",
+    "EC Drug B metab2",
+    "Concentration",
+     "Concentration of Drug B metabolite 2 in the medium at the well bottom",
+    23, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ICoxygen",
+    "IC Oxygen",
+    "Concentration",
+    "Intracellular concentration of oxygen",
+    24, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ICglucose",
+    "IC Glucose",
+    "Concentration",
+     "Intracellular concentration of glucose",
+    25, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ICdrugA",
+    "IC Drug A",
+    "Concentration",
+     "Intracellular concentration of Drug A",
+    26, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ICdrugAmet1",
+    "IC Drug A metab1",
+    "Concentration",
+     "Intracellular concentration of Drug A metabolite 1",
+    27, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ICdrugAmet2",
+    "IC Drug A metab2",
+    "Concentration",
+     "Intracellular concentration of Drug A metabolite 2",
+    28, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ICdrugB",
+    "IC Drug B",
+    "Concentration",
+     "Intracellular concentration of Drug B",
+    29, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ICdrugBmet1",
+    "IC Drug B metab1",
+    "Concentration",
+     "Intracellular concentration of Drug B metabolite 1",
+    30, true, 0, 0.001, 0, TS_TYPE},
+
+    {"ICdrugBmet2",
+    "IC Drug B metab2",
+    "Concentration",
+     "Intracellular concentration of Drug B metabolite 2",
+    31, true, 0, 0.001, 0, TS_TYPE},
+
+    {"Medoxygen",
+    "Medium Oxygen",
+    "Concentration",
+    "Medium average concentration of oxygen",
+    32, true, 0, 0.001, 0, TS_TYPE},
+
+    {"Medglucose",
+    "Medium Glucose",
+    "Concentration",
+     "Medium average concentration of glucose",
+    33, true, 0, 0.001, 0, TS_TYPE},
+
+    {"MeddrugA",
+    "Medium Drug A",
+    "Concentration",
+     "Medium average concentration of Drug A",
+    34, true, 0, 0.001, 0, TS_TYPE},
+
+    {"MeddrugAmet1",
+    "Medium Drug A metab1",
+    "Concentration",
+     "Medium average concentration of Drug A metabolite 1",
+    35, true, 0, 0.001, 0, TS_TYPE},
+
+    {"MeddrugAmet2",
+    "Medium Drug A metab2",
+    "Concentration",
+     "Medium average concentration of Drug A metabolite 2",
+    36, true, 0, 0.001, 0, TS_TYPE},
+
+    {"MeddrugB",
+    "Medium Drug B",
+    "Concentration",
+     "Medium average concentration of Drug B",
+    37, true, 0, 0.001, 0, TS_TYPE},
+
+    {"MeddrugBmet1",
+    "Medium Drug B metab1",
+    "Concentration",
+     "Medium average concentration of Drug B metabolite 1",
+    38, true, 0, 0.001, 0, TS_TYPE},
+
+    {"MeddrugBmet2",
+    "Medium Drug B metab2",
+    "Concentration",
+     "Intracellular concentration of Drug B metabolite 2",
+    39, true, 0, 0.001, 0, TS_TYPE},
 
     {"doublingtime",
     "Ave Doubling time",
     "Hours",
     "Average doubling time",
-    20, true, 0, 0.01, 0, TS_TYPE},
+    40, true, 0, 0.01, 0, TS_TYPE},
+
+    {"dividerate",
+    "# divided/hour",
+    "/hour",
+    "# divided/hour",
+    41, true, 0, 1, 0, TS_TYPE},
+
 
 //    {"bdryoxygen",
 //    "Blob Boundary Oxygen",
@@ -176,8 +297,8 @@ GRAPH_SET tsGraphSet[] = {
 //     "Average concentration of drug B at the blob boundary",
 //    27, true, 0, 0.001, 0, TS_TYPE},
 
-/*
-// Extracellular profiles
+
+// Medium z-profiles
 
     {"MULTI",
     "Multi-constituent",
@@ -197,11 +318,11 @@ GRAPH_SET tsGraphSet[] = {
     "Glucose description",
     GLUCOSE, false, 0, 1, 0, PROF_TYPE},
 
-    {"Tracer",
-    "Tracer Concentration",
-    "",
-    "Tracer description",
-    TRACER, false, 0, 1, 0, PROF_TYPE},
+//    {"Tracer",
+//    "Tracer Concentration",
+//    "",
+//    "Tracer description",
+//    TRACER, false, 0, 1, 0, PROF_TYPE},
 
     {"Drug_A",
     "Drug A Concentration",
@@ -239,6 +360,7 @@ GRAPH_SET tsGraphSet[] = {
     "Drug_B_metab2 description",
     DRUG_B_METAB_2, false, 0, 1, 0, PROF_TYPE},
 
+/*
 // Intracellular profiles
 
     {"IC_MULTI",

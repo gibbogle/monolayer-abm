@@ -317,7 +317,7 @@ real(REAL_KIND) :: doubling_time_sum
 type(cycle_parameters_type), target :: cc_parameters    ! possibly varies by cell type
 
 logical :: drug_gt_cthreshold(MAX_DRUGTYPES)
-real(REAL_KIND), parameter :: Cthreshold = 1.0e-5
+real(REAL_KIND), parameter :: Cthreshold = 1.0e-6
 
 !type(savedata_type) :: saveprofile, saveslice
 
@@ -329,6 +329,7 @@ real(REAL_KIND) :: DELTA_T, DELTA_X, fluid_fraction, Vsite_cm3, Vextra_cm3, Vcel
 !real(REAL_KIND) :: grid_offset(3)
 real(REAL_KIND) :: Vcell_cm3, medium_volume0, total_volume, well_area, t_lastmediumchange
 real(REAL_KIND) :: celltype_fraction(MAX_CELLTYPES)
+integer :: selected_celltype
 logical :: celltype_display(MAX_CELLTYPES)
 real(REAL_KIND) :: MM_THRESHOLD, anoxia_threshold, t_anoxia_limit, anoxia_death_delay, Vdivide0, dVdivide
 real(REAL_KIND) :: aglucosia_threshold, t_aglucosia_limit, aglucosia_death_delay, max_growthrate(MAX_CELLTYPES)
@@ -344,7 +345,7 @@ real(REAL_KIND) :: start_wtime
 type(drug_type), allocatable, target :: drug(:)
 
 integer, allocatable :: gaplist(:)
-integer :: ngaps
+integer :: ngaps, ndivided
 integer, parameter :: max_ngaps = 200000
 
 logical :: bdry_changed
@@ -376,6 +377,7 @@ logical :: is_radiation
 logical :: use_gaplist = .true.
 !logical :: relax
 logical :: medium_change_step
+logical :: fully_mixed
 logical :: use_parallel
 logical :: colony_simulation
 logical :: use_HIF1 = .false.
@@ -401,7 +403,7 @@ integer :: kcell_now
 
 !real(REAL_KIND), allocatable :: omp_x(:), omp_y(:), omp_z(:)
 
-!DEC$ ATTRIBUTES DLLEXPORT :: nsteps, DELTA_T
+!DEC$ ATTRIBUTES DLLEXPORT :: nsteps, DELTA_T, nflog
 
 contains
 
@@ -430,7 +432,7 @@ if (use_TCP) then
     if (awp_0%is_open) then
         call winsock_send(awp_0,trim(msg)//LF,len_trim(msg)+1,error)
     elseif (logfile_isopen) then
-        write(nflog,*) trim(msg)
+        write(nflog,'(a)') trim(msg)
     else
         write(99,*) trim(msg)
     endif
@@ -438,7 +440,7 @@ else
 	write(*,*) trim(msg)
 endif
 if (logfile_isopen) then
-	write(nflog,*) 'msg: ',trim(msg)
+	write(nflog,'(a,a)') 'msg: ',trim(msg)
 	if (error /= 0) then
 	    write(nflog,'(a,i4)') 'winsock_send error: ',error
 	    close(nflog)
@@ -809,6 +811,23 @@ if (dbug) write(nflog,*) 'squeezed: ',n,nlist
 
 end subroutine
 
+subroutine check_ntagged(msg)
+character*(*) :: msg
+integer :: kcell, nt
+type(cell_type),pointer :: cp
+
+return
+nt = 0
+do kcell = 1,nlist
+	cp => cell_list(kcell)
+	if (cp%state == DEAD) cycle
+	if (cp%drug_tag(1)) nt = nt+1
+enddo
+write(*,*) 'check_tagged: ',msg,nt,ndrug_tag(1,1)
+if (nt /= ndrug_tag(1,1)) then
+	stop
+endif
+end subroutine
 
 
 end module
