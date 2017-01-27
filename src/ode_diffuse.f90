@@ -253,6 +253,7 @@ do im = 0,2
 	ichemo = iparent + im
 	Kd = chemo(ichemo)%medium_diff_coef
     decay_rate = chemo(ichemo)%decay_rate
+!	decay_rate = 0
     membrane_kin = chemo(ichemo)%membrane_diff_in
     membrane_kout = chemo(ichemo)%membrane_diff_out
 	membrane_flux = area_factor*(membrane_kin*Cex - membrane_kout*C)
@@ -332,6 +333,7 @@ type(rkc_comm) :: comm_rkc(1)
 logical :: solve_O2 = .true.
 logical :: use_drugsolver = .true.
 
+ok = .true.
 k = 0
 do ic = 1,nchemo
 	ichemo = chemomap(ic)
@@ -430,7 +432,7 @@ real(REAL_KIND) :: tstart, dt
 logical :: ok
 integer :: ichemo, k, ict, neqn, i, kcell, im
 real(REAL_KIND) :: t, tend
-real(REAL_KIND) :: C(3*N1D+3), Csum
+real(REAL_KIND) :: C(3*N1D+3), Csum, decay_rate
 real(REAL_KIND) :: timer1, timer2
 ! Variables for RKC
 integer :: info(4), idid
@@ -453,6 +455,8 @@ do im = 0,2
 		C(k) = chemo(ichemo)%Cmedium(i)
 	enddo
 enddo
+!write(nflog,*) 'drugsolver:'
+!write(nflog,'(63e12.5)') C(:)
 
 neqn = k
 
@@ -460,7 +464,7 @@ info(1) = 1
 info(2) = 1		! = 1 => use spcrad() to estimate spectral radius, != 1 => let rkc do it
 info(3) = 1
 info(4) = 0
-rtol = 1d-2
+rtol = 1d-5
 atol = rtol
 
 idid = 0
@@ -474,6 +478,8 @@ if (idid /= 1) then
 	return
 endif
 !write(nflog,'(a,3e12.3)') 'IC: ',C(1),C(N1D+2),C(2*N1D+3)
+!write(nflog,*) 'after rkc:'
+!write(nflog,'(63e12.5)') C(:)
 
 ! This determines average cell concentrations, assumed the same for all cells
 ! Now put the concentrations into the cells 
@@ -483,11 +489,23 @@ do im = 0,2
 	if (.not.chemo(ichemo)%present) cycle
     k = im*(N1D+1) + 1
     Caverage(ichemo) = C(k)
+	if (C(k) < 0) then
+		write(logmsg,'(a,i4,e12.3)') 'Error: drugsolver: IC < 0: im,IC: ',im,Caverage(ichemo)
+		call logger(logmsg)
+		ok = .false.
+		return
+	endif
     Csum = 0
     do i = 1,N1D
-!		CdrugMedium(idrug,im,i) = C(k+i)
-		chemo(ichemo)%Cmedium(i) = C(k+1)
+		chemo(ichemo)%Cmedium(i) = C(k+i)
 		Csum = Csum + C(k+i)
+		C(k+i) = max(0.0d0,C(k+i))
+		if (C(k+i) < 0) then
+			write(logmsg,'(a,2i4,2e12.3)') 'Error: drugsolver: C < 0: im,k,IC,C(k+i): ',im,k,Caverage(ichemo),C(k+i)
+			call logger(logmsg)
+			ok = .false.
+			return
+		endif
 	enddo
 	Cmediumave(ichemo) = Csum/N1D
     do kcell = 1,nlist
@@ -495,10 +513,10 @@ do im = 0,2
         cell_list(kcell)%Cin(ichemo) = Caverage(ichemo)
     enddo
     Caverage(MAX_CHEMO + ichemo) = C(k+1)	! not really average, this is medium at the cell layer 
-!	write(nflog,'(a,i3,5e12.3)') 'Cdrug: im: ',im,Cdrug(im,1:5)
+!	write(nflog,'(a,i3,20e12.3)') 'Cmedium: im: ',im,chemo(ichemo)%Cmedium(1:20)
 enddo
-write(nflog,'(a,3e12.3)') 'IC drug conc: ',(Caverage(DRUG_A+k),k=0,2)
-write(nflog,'(a,3e12.3)') 'EC drug conc: ',(Caverage(MAX_CHEMO + DRUG_A+k),k=0,2)
+!write(nflog,'(a,3e12.3)') 'IC drug conc: ',(Caverage(DRUG_A+k),k=0,2)
+!write(nflog,'(a,3e12.3)') 'EC drug conc: ',(Caverage(MAX_CHEMO + DRUG_A+k),k=0,2)
 
 end subroutine
 

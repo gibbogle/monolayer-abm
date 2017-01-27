@@ -79,7 +79,7 @@ padding: 8px
            <enum>QTabWidget::West</enum>
           </property>
           <property name="currentIndex">
-           <number>5</number>
+           <number>1</number>
           </property>
           <property name="elideMode">
            <enum>Qt::ElideNone</enum>
@@ -5192,7 +5192,7 @@ padding: 8px
                  <string>Metabolite 2</string>
                 </property>
                 <property name="alignment">
-                 <set>Qt::AlignCenter</set>
+                 <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
                 </property>
                </widget>
               </item>
@@ -5220,7 +5220,7 @@ padding: 8px
                  <string>Metabolite 1</string>
                 </property>
                 <property name="alignment">
-                 <set>Qt::AlignCenter</set>
+                 <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
                 </property>
                </widget>
               </item>
@@ -5248,12 +5248,18 @@ padding: 8px
                  <string>Parent</string>
                 </property>
                 <property name="alignment">
-                 <set>Qt::AlignCenter</set>
+                 <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
                 </property>
                </widget>
               </item>
               <item row="1" column="4">
                <widget class="QLineEdit" name="line_METAB2_0">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5264,6 +5270,12 @@ padding: 8px
               </item>
               <item row="1" column="3">
                <widget class="QLineEdit" name="line_METAB1_0">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5282,7 +5294,7 @@ padding: 8px
                 </property>
                 <property name="minimumSize">
                  <size>
-                  <width>45</width>
+                  <width>60</width>
                   <height>0</height>
                  </size>
                 </property>
@@ -5345,7 +5357,7 @@ padding: 8px
                <widget class="QLineEdit" name="line_PARENT_1">
                 <property name="minimumSize">
                  <size>
-                  <width>45</width>
+                  <width>60</width>
                   <height>0</height>
                  </size>
                 </property>
@@ -5388,6 +5400,12 @@ padding: 8px
               </item>
               <item row="3" column="2">
                <widget class="QLineEdit" name="line_PARENT_2">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5416,6 +5434,12 @@ padding: 8px
                <widget class="QLineEdit" name="line_PARENT_4">
                 <property name="enabled">
                  <bool>true</bool>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
                 </property>
                 <property name="maximumSize">
                  <size>
@@ -5481,6 +5505,12 @@ padding: 8px
               </item>
               <item row="4" column="2">
                <widget class="QLineEdit" name="line_PARENT_3">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5508,6 +5538,12 @@ padding: 8px
               </item>
               <item row="2" column="3">
                <widget class="QLineEdit" name="line_METAB1_1">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5518,6 +5554,12 @@ padding: 8px
               </item>
               <item row="3" column="3">
                <widget class="QLineEdit" name="line_METAB1_2">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5528,6 +5570,12 @@ padding: 8px
               </item>
               <item row="4" column="3">
                <widget class="QLineEdit" name="line_METAB1_3">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5538,6 +5586,12 @@ padding: 8px
               </item>
               <item row="5" column="3">
                <widget class="QLineEdit" name="line_METAB1_4">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5548,6 +5602,12 @@ padding: 8px
               </item>
               <item row="2" column="4">
                <widget class="QLineEdit" name="line_METAB2_1">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5558,6 +5618,12 @@ padding: 8px
               </item>
               <item row="3" column="4">
                <widget class="QLineEdit" name="line_METAB2_2">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5568,6 +5634,12 @@ padding: 8px
               </item>
               <item row="4" column="4">
                <widget class="QLineEdit" name="line_METAB2_3">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>
@@ -5578,6 +5650,12 @@ padding: 8px
               </item>
               <item row="5" column="4">
                <widget class="QLineEdit" name="line_METAB2_4">
+                <property name="minimumSize">
+                 <size>
+                  <width>60</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="maximumSize">
                  <size>
                   <width>45</width>

@@ -1492,7 +1492,6 @@ do idrug = 1,2
 	do im = 0,2
 		ichemo = iparent + im	
 		chemo(ichemo)%Cmedium = Caverage(MAX_CHEMO+ichemo)
-!		Cdrug(im,:) = Caverage(MAX_CHEMO+DRUG_A+im)
 	enddo
 enddo
 t_lastmediumchange = istep*DELTA_T
@@ -1581,7 +1580,6 @@ if (limit_stop) then
 endif
 
 nthour = 3600/DELTA_T
-dt = DELTA_T/NT_CONC
 
 if (istep == -100) then
 !	call make_colony_distribution()
@@ -1620,31 +1618,34 @@ drug_gt_cthreshold = .false.
 
 if (medium_change_step) then
 	ndiv = 6
+	dt = DELTA_T/(NT_CONC*ndiv)
 else
 	ndiv = 1
+	dt = DELTA_T/NT_CONC
 endif
 DELTA_T_save = DELTA_T
 DELTA_T = DELTA_T/ndiv
 t_sim_0 = t_simulation
 do idiv = 0,ndiv-1
-t_simulation = t_sim_0 + idiv*DELTA_T
-
-if (dbug) write(nflog,*) 'Solver'
-do it_solve = 1,NT_CONC
-	tstart = (it_solve-1)*dt
-	t_simulation = t_simulation + (it_solve-1)*dt
-	call Solver(it_solve,tstart,dt,Ncells,ok)
-	if (.not.ok) then
-		res = 5
-		return
-	endif
-	! Set O2 levels
-    call SetOxygenLevels
-	if (.not.fully_mixed) call SolveMediumGlucose(dt)
-enddo
-!write(nflog,*) 'did Solver'
-call CheckDrugConcs
-call CheckDrugPresence
+	t_simulation = t_sim_0 + idiv*DELTA_T
+	if (dbug) write(nflog,*) 'Solver'
+	do it_solve = 1,NT_CONC
+		tstart = (it_solve-1)*dt
+		t_simulation = t_simulation + (it_solve-1)*dt
+!		if (ndiv > 1) call logger('sub-step')
+		call Solver(it_solve,tstart,dt,Ncells,ok)
+		if (.not.ok) then
+			call logger('Solver failed')
+			res = 5
+			return
+		endif
+		! Set O2 levels
+		call SetOxygenLevels
+		if (.not.fully_mixed) call SolveMediumGlucose(dt)
+	enddo
+	!write(nflog,*) 'did Solver'
+	call CheckDrugConcs
+	call CheckDrugPresence
 
 enddo
 DELTA_T = DELTA_T_save
