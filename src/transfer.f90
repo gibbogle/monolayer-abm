@@ -946,13 +946,13 @@ real(REAL_KIND) :: A, d
 integer :: k, ks, ichemo, offset
 
 !call logger('get_concdata')
-nvars = 1 + MAX_CHEMO + N_EXTRA
+nvars = 1 + MAX_CHEMO
 ns = N1D
 A = well_area
 d = total_volume/A
 dxc = d/(ns-1)
 do ks = 1,ns
-	do ichemo = 0, nvars-1
+	do ichemo = 1, nvars-1
 		offset = ichemo*ns
 		k = offset - 1 + ks
 		ex_conc(k) = chemo(ichemo)%Cmedium(ks)
