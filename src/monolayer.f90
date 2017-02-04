@@ -1567,6 +1567,7 @@ logical :: dbug
 !write(*,'(a,f8.3)') 'simulate_step: time: ',wtime()-start_wtime
 !write(nflog,'(a,f8.3)') 'simulate_step: time: ',wtime()-start_wtime
 !write(nflog,*) 'istep: ',istep
+!write(*,*) 'istep: ',istep
 dbug = .false.
 if (Ncells == 0) then
 	call logger('Ncells = 0')
@@ -1641,7 +1642,8 @@ do idiv = 0,ndiv-1
 		endif
 		! Set O2 levels
 		call SetOxygenLevels
-		if (.not.fully_mixed) call SolveMediumGlucose(dt)
+!		Cancelled, now using GlucoseSolver
+!		if (.not.fully_mixed) call SolveMediumGlucose(dt)
 	enddo
 	!write(nflog,*) 'did Solver'
 	call CheckDrugConcs

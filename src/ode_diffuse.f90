@@ -149,7 +149,7 @@ do ic = 1,neqn
 
     Cex = Cmedium(ichemo)
 	C = Cin(ichemo)     ! = y(ic)
-!	if (ichemo == DRUG_A) write(*,'(a,2f8.4)') 'Cin,Cex: ',C,Cex
+	if (ichemo == GLUCOSE) write(nflog,'(a,2f8.4)') 'Cin,Cex: ',C,Cex
 	membrane_flux = area_factor*(membrane_kin*Cex - membrane_kout*C)
 !	if (is_metab1) then
 !	    write(*,'(a,3e12.3)') 'metab1: membrane_flux: ',membrane_flux,Cex,C
@@ -168,7 +168,7 @@ do ic = 1,neqn
 		        ! cell_flux = cell_flux*(1 + b*H)
 		    endif
 		    dCreact = (-cell_flux + membrane_flux)/vol_cm3	! convert mass rate (mumol/s) to concentration rate (mM/s)
-!		    write(*,'(a,6e11.3)') 'glucose: ',C,metab,chemo(ichemo)%max_cell_rate,membrane_flux,vol_cm3,dCreact
+		    write(nflog,'(a,6e11.3)') 'glucose: ',C,metab,chemo(ichemo)%max_cell_rate,membrane_flux,vol_cm3,dCreact
 	    elseif (im == 0) then
 	        if (metabolised(ict,0) .and. C > 0) then
 			    KmetC = dp%Kmet0(ict,0)*C
@@ -205,8 +205,9 @@ do ic = 1,neqn
 !        if (ichemo > TRACER) write(*,*) 'drug medium dydt: ',dydt(ic)
     endif
 	if (isnan(dydt(ic))) then
-		write(nflog,*) 'f_rkc: dydt isnan: ',ic,ichemo,dydt(ic)
-		write(*,*) 'f_rkc: dydt isnan: ',ic,ichemo,dydt(ic)
+		write(logmsg,*) 'f_rkc: dydt isnan: ',ic,ichemo,dydt(ic)
+		call logger(logmsg)
+!		write(*,*) 'f_rkc: dydt isnan: ',ic,ichemo,dydt(ic)
 		stop
 	endif
 enddo
@@ -318,13 +319,78 @@ end subroutine
 
 !----------------------------------------------------------------------------------
 !----------------------------------------------------------------------------------
-subroutine Solver(it,tstart,dt,nc,ok)
+subroutine f_rkc_glucose(neqn,t,y,dydt,icase)
+integer :: neqn, icase
+real(REAL_KIND) :: t, y(neqn), dydt(neqn)
+integer :: k, kk, i, ichemo, ict, Ng
+real(REAL_KIND) :: dCsum, dCdiff, dCreact, vol_cm3, Cex
+real(REAL_KIND) :: decay_rate, C, membrane_kin, membrane_kout, membrane_flux, area_factor
+real(REAL_KIND) :: metab, cell_flux, dMdt, vcell_actual, dC, A, d, dX, dV, Kd, KdAVX
+real(REAL_KIND) :: average_volume = 1.2
+logical :: use_average_volume = .true.
+
+ict = icase
+A = well_area
+d = total_volume/A
+dX = d/N1D
+dV = A*dX
+if (use_average_volume) then
+    vol_cm3 = Vcell_cm3*average_volume	  ! not accounting for cell volume change
+    area_factor = (average_volume)**(2./3.)
+endif
+
+ichemo = GLUCOSE
+Ng = chemo(GLUCOSE)%Hill_N
+k = 0
+	! First process IC reaction
+	k = k+1
+	C = y(k)
+	Cex = y(k+1)
+!	ichemo = iparent + im
+	Kd = chemo(ichemo)%medium_diff_coef
+!    decay_rate = chemo(ichemo)%decay_rate
+	decay_rate = 0
+    membrane_kin = chemo(ichemo)%membrane_diff_in
+    membrane_kout = chemo(ichemo)%membrane_diff_out
+	membrane_flux = area_factor*(membrane_kin*Cex - membrane_kout*C)
+    metab = C**Ng/(chemo(ichemo)%MM_C0**Ng + C**Ng)
+    cell_flux = metab*chemo(ichemo)%max_cell_rate
+    dCreact = (-cell_flux + membrane_flux)/vol_cm3	! convert mass rate (mumol/s) to concentration rate (mM/s)
+	dydt(k) = dCreact - C*decay_rate
+!	write(nflog,'(a,i4,e12.3)') 'dydt: ',im,dydt(k)
+	if (isnan(dydt(k))) then
+		write(nflog,*) 'f_rkc_glucose: dydt isnan: ',dydt(k)
+!		write(*,*) 'f_rkc_glucose: dydt isnan: ',dydt(k)
+		stop
+	endif
+	
+	! Next process grid cell next to the cell layer - note that membrane _flux has already been computed
+	k = k+1
+	C = y(k)
+	dydt(k) = (-Ncells*membrane_flux - Kd*A*(C - y(k+1))/dX)/dV - C*decay_rate
+	
+	! Next compute diffusion and decay on the FD grid
+	KdAVX = Kd*A/(dV*dX)
+	do i = 2,N1D
+		k = k+1
+		C = y(k)
+		if (i < N1D) then
+			dydt(k) = KdAVX*(y(k+1) - 2*C + y(k-1)) - C*decay_rate
+		else
+			dydt(k) = KdAVX*(-C + y(k-1)) - C*decay_rate
+		endif
+	enddo
+end subroutine
+
+!----------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------
+subroutine Solver1(it,tstart,dt,nc,ok)
 integer :: it, nc
 real(REAL_KIND) :: tstart, dt
 logical :: ok
-integer :: ichemo, ic, k, ict, ncvars, neqn, kcell
+integer :: ichemo, ic, k, ict, ncvars, neqn, kcell, i
 real(REAL_KIND) :: t, tend
-real(REAL_KIND) :: C(2*MAX_CHEMO)
+real(REAL_KIND) :: C(2*MAX_CHEMO), Csum
 real(REAL_KIND) :: timer1, timer2
 ! Variables for RKC
 integer :: info(4), idid
@@ -379,7 +445,7 @@ info(1) = 1
 info(2) = 1		! = 1 => use spcrad() to estimate spectral radius, != 1 => let rkc do it
 info(3) = 1
 info(4) = 0
-rtol = 1d-2
+rtol = 1d-5
 atol = rtol
 
 idid = 0
@@ -422,6 +488,198 @@ endif
 if (chemo(DRUG_B)%present) then
 	call DrugSolver(DRUG_B,tstart,dt,2,ok)
 endif
+end subroutine
+
+!----------------------------------------------------------------------------------
+! Now solve for GLUCOSE in 1D medium
+!----------------------------------------------------------------------------------
+subroutine Solver(it,tstart,dt,nc,ok)
+integer :: it, nc
+real(REAL_KIND) :: tstart, dt
+logical :: ok
+integer :: ichemo, ic, k, ict, ncvars, neqn, kcell, i
+real(REAL_KIND) :: t, tend
+real(REAL_KIND) :: C(2*MAX_CHEMO), Csum
+real(REAL_KIND) :: timer1, timer2
+! Variables for RKC
+integer :: info(4), idid
+real(REAL_KIND) :: rtol, atol(1)
+type(rkc_comm) :: comm_rkc(1)
+logical :: solve_O2 = .true.
+logical :: use_drugsolver = .true.
+
+ok = .true.
+!k = 0
+!do ic = 1,nchemo
+!	ichemo = chemomap(ic)
+!	k = k + 1
+!    chemo_active(k) = .not.chemo(ichemo)%constant
+!    if (ichemo == OXYGEN) then
+!        if (.not.solve_O2) then
+!            ! Suppress solving for cell oxygen
+!!	        Caverage(OXYGEN) = getCin(OXYGEN,Caverage(MAX_CHEMO+OXYGEN))
+!            chemo_active(k) = .false.
+!        endif
+!    endif
+!	if (use_drugsolver .and. ichemo >= DRUG_A) then
+!        chemo_active(k) = .false.
+!	endif	
+!	C(k) = Caverage(ichemo)                ! average cell concentration
+!enddo
+!ncvars = k
+!! Note: ncvars = nchemo
+!do ic = 1,nchemo
+!	ichemo = chemomap(ic)
+!	k = k + 1
+!	C(k) = Caverage(MAX_CHEMO + ichemo)      ! average EC concentration
+!    chemo_active(k) = .not.chemo(ichemo)%constant
+!    if (ichemo == OXYGEN) then
+!        ! Suppress solving for medium oxygen
+!        chemo_active(k) = .false.
+!    endif
+!	if (use_drugsolver .and. ichemo >= DRUG_A) then
+!        chemo_active(k) = .false.
+!	endif	
+!enddo
+!neqn = k
+!! Note: neqn = 2*ncvars
+!
+!!write(*,*) 'solver: nchemo,neqn: ',nchemo,neqn
+!!write(*,'(10f7.3)') C(1:neqn)
+!!write(*,'(a,3f8.5)') 'solver: metab1: ',Caverage(MAX_CHEMO+4:MAX_CHEMO+6)
+!
+!ict = 1 ! for now just a single cell type
+!
+!info(1) = 1
+!info(2) = 1		! = 1 => use spcrad() to estimate spectral radius, != 1 => let rkc do it
+!info(3) = 1
+!info(4) = 0
+!rtol = 1d-5
+!atol = rtol
+!
+!idid = 0
+!t = tstart
+!tend = t + dt
+!call rkc(comm_rkc(1),neqn,f_rkc,C,t,tend,rtol,atol,info,work_rkc,idid,ict)
+!if (idid /= 1) then
+!	write(logmsg,*) 'Solver: Failed at t = ',t,' with idid = ',idid
+!	call logger(logmsg)
+!	ok = .false.
+!	return
+!endif
+!
+!! This determines average cell concentrations, assumed the same for all cells
+!! Now put the concentrations into the cells
+!
+!k = 0
+!do ic = 1,nchemo
+!    ichemo = chemomap(ic)
+!    k = k + 1
+!    if (.not.chemo_active(k)) cycle
+!    Caverage(ichemo) = C(k)
+!    do kcell = 1,nlist
+!        if (cell_list(kcell)%state == DEAD) cycle
+!        cell_list(kcell)%Cin(ichemo) = Caverage(ichemo)
+!    enddo
+!enddo
+!k = ncvars
+!do ic = 1,nchemo
+!    ichemo = chemomap(ic)
+!    k = k + 1
+!    if (.not.chemo_active(k)) cycle
+!    Caverage(MAX_CHEMO + ichemo) = C(k)
+!enddo
+
+call GlucoseSolver(tstart,dt,ok)
+
+if (.not.use_drugsolver) return
+if (chemo(DRUG_A)%present) then
+	call DrugSolver(DRUG_A,tstart,dt,1,ok)
+endif
+if (chemo(DRUG_B)%present) then
+	call DrugSolver(DRUG_B,tstart,dt,2,ok)
+endif
+end subroutine
+
+!----------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------
+subroutine GlucoseSolver(tstart,dt,ok)
+real(REAL_KIND) :: tstart, dt
+logical :: ok
+integer :: ichemo, k, ict, neqn, i, kcell, im
+real(REAL_KIND) :: t, tend
+real(REAL_KIND) :: C(3*N1D+3), Csum, decay_rate
+real(REAL_KIND) :: timer1, timer2
+! Variables for RKC
+integer :: info(4), idid
+real(REAL_KIND) :: rtol, atol(1)
+type(rkc_comm) :: comm_rkc(1)
+
+!write(nflog,*) 'GlucoseSolver: ',istep
+ict = selected_celltype
+
+k = 0
+ichemo = GLUCOSE
+k = k+1
+C(k) = Caverage(ichemo)		! IC 
+do i = 1,N1D
+	k = k+1
+	C(k) = chemo(ichemo)%Cmedium(i)
+enddo
+
+neqn = k
+
+info(1) = 1
+info(2) = 1		! = 1 => use spcrad() to estimate spectral radius, != 1 => let rkc do it
+info(3) = 1
+info(4) = 0
+rtol = 1d-5
+atol = rtol
+
+idid = 0
+t = tstart
+tend = t + dt
+call rkc(comm_rkc(1),neqn,f_rkc_glucose,C,t,tend,rtol,atol,info,work_rkc,idid,ict)
+if (idid /= 1) then
+	write(logmsg,*) 'Solver: Failed at t = ',t,' with idid = ',idid
+	call logger(logmsg)
+	ok = .false.
+	return
+endif
+!write(nflog,'(a,3e12.3)') 'IC: ',C(1),C(N1D+2),C(2*N1D+3)
+!write(nflog,*) 'after rkc:'
+!write(nflog,'(63e12.5)') C(:)
+
+! This determines average cell concentrations, assumed the same for all cells
+! Now put the concentrations into the cells 
+
+k = 1
+Caverage(ichemo) = C(k)
+if (C(k) < 0) then
+	write(logmsg,'(a,i4,e12.3)') 'Error: glucosesolver: IC < 0: im,IC: ',im,Caverage(ichemo)
+	call logger(logmsg)
+	ok = .false.
+	return
+endif
+Csum = 0
+do i = 1,N1D
+	chemo(ichemo)%Cmedium(i) = C(k+i)
+	Csum = Csum + C(k+i)
+	C(k+i) = max(0.0d0,C(k+i))
+	if (C(k+i) < 0) then
+		write(logmsg,'(a,2i4,2e12.3)') 'Error: glucosesolver: C < 0: im,k,IC,C(k+i): ',im,k,Caverage(ichemo),C(k+i)
+		call logger(logmsg)
+		ok = .false.
+		return
+	endif
+enddo
+Cmediumave(ichemo) = Csum/N1D
+do kcell = 1,nlist
+    if (cell_list(kcell)%state == DEAD) cycle
+    cell_list(kcell)%Cin(ichemo) = Caverage(ichemo)
+enddo
+Caverage(MAX_CHEMO + ichemo) = C(k+1)	! not really average, this is medium at the cell layer 
+
 end subroutine
 
 !----------------------------------------------------------------------------------
@@ -657,7 +915,7 @@ real(REAL_KIND) :: dt
 real(REAL_KIND) :: A, d, dX, Kd, dV, area_factor, membrane_kin, membrane_kout
 real(REAL_KIND) :: C, Cex, membrane_flux, uptake_rate, F(N1D+1)
 integer :: ichemo, i, k
-integer :: ndt = 20
+integer :: ndt = 100
 real(REAL_KIND) :: average_volume = 1.2
 real(REAL_KIND), dimension(:), pointer :: Cglucose
 
@@ -691,7 +949,7 @@ do k = 1,ndt
 enddo
 Cmediumave(GLUCOSE) = sum(Cglucose)/N1D
 !write(nflog,'(6e12.3)') F(1),C,(Cglucose(i),i=1,4)
-!write(nflog,'(10e12.3)') (Cglucose(i),i=1,N1D)
+write(nflog,'(10e12.3)') (Cglucose(i),i=1,N1D)
 Caverage(MAX_CHEMO + ichemo) = Cex
 end subroutine
 
