@@ -460,7 +460,7 @@ real(REAL_KIND) :: R
 integer, parameter :: MAX_DIVIDE_LIST = 10000
 integer :: ndivide, divide_list(MAX_DIVIDE_LIST)
 logical :: drugkilled
-logical :: mitosis_entry, in_mitosis, divide
+logical :: mitosis_entry, in_mitosis, divide, tagged
 
 ok = .true.
 changed = .false.
@@ -478,6 +478,10 @@ do kcell = 1,nlist0
     	cp => cell_list(kcell)
     endif
 	if (cp%state == DEAD) cycle
+	tagged = cp%anoxia_tag .or. cp%aglucosia_tag
+	if (tagged) then
+		cp%dVdt = 0
+	endif
 	ityp = cp%celltype
 	divide = .false.
 	mitosis_entry = .false.
@@ -488,7 +492,9 @@ do kcell = 1,nlist0
 !            write(*,'(a,i6,L2,2e12.3)') 'kcell: ',kcell,cp%Iphase,cp%V,cp%divide_volume
 !        endif
 	    if (cp%Iphase) then
-		    call growcell(cp,dt)
+			if (.not.tagged) then
+			    call growcell(cp,dt)
+			endif
 		    if (cp%V > cp%divide_volume) then	! time to enter mitosis
  !   	        mitosis_entry = .true.
 				cp%Iphase = .false.
@@ -519,7 +525,9 @@ do kcell = 1,nlist0
             in_mitosis = .true.
         endif
 		if (cp%phase < Checkpoint2 .and. cp%phase /= Checkpoint1) then
-		    call growcell(cp,dt)
+			if (.not.tagged) then
+			    call growcell(cp,dt)
+			endif
 		endif	
 	endif
 !	if (mitosis_entry) then
