@@ -709,7 +709,6 @@ do im = 0,2
 	C(k) = Caverage(ichemo)		! IC 
 	do i = 1,N1D
 		k = k+1
-!		C(k) = CdrugMedium(idrug,im,i)		! EC
 		C(k) = chemo(ichemo)%Cmedium(i)
 	enddo
 enddo
@@ -771,10 +770,9 @@ do im = 0,2
         cell_list(kcell)%Cin(ichemo) = Caverage(ichemo)
     enddo
     Caverage(MAX_CHEMO + ichemo) = C(k+1)	! not really average, this is medium at the cell layer 
-!	write(nflog,'(a,i3,20e12.3)') 'Cmedium: im: ',im,chemo(ichemo)%Cmedium(1:20)
 enddo
-!write(nflog,'(a,3e12.3)') 'IC drug conc: ',(Caverage(DRUG_A+k),k=0,2)
-!write(nflog,'(a,3e12.3)') 'EC drug conc: ',(Caverage(MAX_CHEMO + DRUG_A+k),k=0,2)
+write(nflog,'(a,3e12.3)') 'IC drug conc: ',(Caverage(DRUG_A+k),k=0,2)
+write(nflog,'(a,3e12.3)') 'EC drug conc: ',(Caverage(MAX_CHEMO + DRUG_A+k),k=0,2)
 
 end subroutine
 

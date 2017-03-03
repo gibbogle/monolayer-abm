@@ -691,7 +691,7 @@ Nsteps = days*24*60*60/DELTA_T		! DELTA_T in seconds
 write(logmsg,'(a,2i6,f6.0)') 'nsteps, NT_CONC, DELTA_T: ',nsteps,NT_CONC,DELTA_T
 call logger(logmsg)
 
-call DetermineKd	! Kd is now set or computed in the GUI 
+call DetermineKd
 ndivided = 0
 ok = .true.
 
@@ -999,7 +999,7 @@ end subroutine
 ! kill_model = 3:
 !   c = Kd.(F(CkillO2).kmet0.Ckill)^2 => Kd = -log(1-f)/(T.(F(CkillO2).kmet0.Ckill)^2)
 ! kill_model = 4:
-!   c = Kd.Ckill => Kd = -log(1-f)/(T.Ckill)
+!   c = Kd.Ckill => Kd = -log(1-f)/(T.Ckill) 
 ! kill_model = 5:
 !   c = Kd.Ckill^2 => Kd = -log(1-f)/(T.Ckill^2)
 !-----------------------------------------------------------------------------------------
@@ -1009,8 +1009,6 @@ real(REAL_KIND) :: f, T, Ckill, Ckill_O2, Kd
 integer :: idrug, ictyp, im, kill_model
 
 do idrug = 1,ndrugs_used
-!	if (idrug == 1 .and. .not.chemo(TPZ_DRUG)%used) cycle
-!	if (idrug == 2 .and. .not.chemo(DNB_DRUG)%used) cycle
 	do ictyp = 1,Ncelltypes
 		do im = 0,2
 			if (drug(idrug)%kills(ictyp,im)) then
@@ -1035,13 +1033,9 @@ do idrug = 1,ndrugs_used
 				elseif (kill_model == 5) then
 					Kd = -log(1-f)/(T*Ckill**2)
 				endif
+				write(nflog,'(a,i2,8e12.3)') 'DetermineKd: im,C2,KO2,Ckill,Kmet0,f,T,kmet,Kd: ',im,C2,KO2,Ckill,Kmet0,f,T,kmet,Kd
 				drug(idrug)%Kd(ictyp,im) = Kd
 			endif
-!			if (idrug == 1) then
-!				TPZ%Kd(i) = Kd
-!			elseif (idrug == 2) then
-!				DNB%Kd(i,im) = Kd
-!			endif
 		enddo
 	enddo
 enddo
@@ -1465,37 +1459,34 @@ real(REAL_KIND) :: Ve, Ce(:)
 real(REAL_KIND) :: R, Vm, Vr, Vcells, mass(MAX_CHEMO)
 integer :: ichemo, idrug, im, iparent
 
+write(nflog,*)
 write(nflog,*) 'MediumChange:'
 write(nflog,'(a,f8.4)') 'Ve: ',Ve
 write(nflog,'(a,13f8.4)') 'Ce: ',Ce
-write(nflog,'(a,13e12.3)')'medium_M: ',chemo(OXYGEN+1:)%medium_M
 Vcells = Ncells*Vcell_cm3
 Vm = total_volume - Vcells
 Vr = min(Vm,Ve)
-!write(nflog,'(a,4f8.4)') 'total_volume, Vcells, Vm, Vr: ',total_volume, Vcells, Vm, Vr
+write(nflog,'(a,4f8.4)') 'total_volume, Vcells, Vm, Vr: ',total_volume, Vcells, Vm, Vr
 mass = (Vm - Vr)*Caverage(MAX_CHEMO+1:2*MAX_CHEMO) + Ve*Ce(:)
-!chemo(:)%medium_M = ((Vm - Vr)/Vm)*chemo(:)%medium_M + Ve*Ce(:)
+write(nflog,'(a,13f8.4)') 'mass: ',mass
 total_volume = Vm - Vr + Ve + Vcells
-!chemo(:)%medium_Cext = chemo(:)%medium_M/(total_volume - Vcells)
-!chemo(:)%medium_Cbnd = chemo(:)%medium_Cext
 Caverage(MAX_CHEMO+1:2*MAX_CHEMO) = mass/(total_volume - Vcells)
-!chemo(OXYGEN+1:)%medium_Cext = chemo(OXYGEN+1:)%medium_M/(total_volume - Vblob)
-!chemo(OXYGEN)%medium_Cext = chemo(OXYGEN)%bdry_conc
-!write(nflog,'(a,13e12.3)')'medium_M: ',chemo(OXYGEN+1:)%medium_M
-!write(nflog,'(a,13f8.4)') 'medium_Cext ',chemo(OXYGEN+1:)%medium_Cext
+write(nflog,'(a,13f8.4)') 'Caverage: ',Caverage(MAX_CHEMO+1:2*MAX_CHEMO)
+
 chemo(OXYGEN)%bdry_conc = Ce(OXYGEN)
 call SetOxygenLevels
-!CglucoseMedium = Caverage(MAX_CHEMO+GLUCOSE)
 chemo(GLUCOSE)%Cmedium = Caverage(MAX_CHEMO+GLUCOSE)
 do idrug = 1,2
 	iparent = DRUG_A + 3*(idrug-1)
 	do im = 0,2
 		ichemo = iparent + im	
 		chemo(ichemo)%Cmedium = Caverage(MAX_CHEMO+ichemo)
+		write(nflog,'(a,4i3,e12.3)') 'idrug,iparent,im,ichemo,Cmedium: ',idrug,iparent,im,ichemo,chemo(ichemo)%Cmedium(1)
 	enddo
 enddo
 t_lastmediumchange = istep*DELTA_T
 medium_change_step = .true.
+write(nflog,*)
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -1508,7 +1499,7 @@ end subroutine
 ! average O2 concentration = (Cbnd + Cex)/2
 !-----------------------------------------------------------------------------------------
 subroutine SetOxygenLevels
-integer :: ichemo, k
+integer :: ichemo, k, kcell
 real(REAL_KIND) :: Kin, Kout, Kd, Cex, Cin, Cbnd, A, d, flux, Cin_prev, alpha
 real(REAL_KIND) :: tol = 1.0e-6
 
@@ -1541,6 +1532,11 @@ do k = 1,N1D
 	alpha = real(k-1)/(N1D-1)
 	chemo(OXYGEN)%Cmedium(k) = alpha*chemo(ichemo)%bdry_conc + (1-alpha)*Cex
 enddo
+do kcell = 1,nlist
+    if (cell_list(kcell)%state == DEAD) cycle
+    cell_list(kcell)%Cin(ichemo) = Cin
+enddo
+	
 end subroutine
 
 !-----------------------------------------------------------------------------------------

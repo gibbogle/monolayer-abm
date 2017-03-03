@@ -225,6 +225,7 @@ real(REAL_KIND) :: C_O2, C_glucose, Cdrug, n_O2, kmet, Kd, dMdt, kill_prob, dkil
 logical :: anoxia_death, aglucosia_death
 type(drug_type), pointer :: dp
 type(cell_type), pointer :: cp
+logical :: flag = .true.
 
 !call logger('CellDeath')
 ok = .true.
@@ -233,6 +234,7 @@ if (colony_simulation) then
 endif
 
 !tnow = istep*DELTA_T	! seconds
+!flag = .false.
 anoxia_death = chemo(OXYGEN)%controls_death
 aglucosia_death = chemo(GLUCOSE)%controls_death
 nlist0 = nlist
@@ -292,6 +294,7 @@ do kcell = 1,nlist
 	
 	do idrug = 1,ndrugs_used	
 		ichemo = DRUG_A + 3*(idrug-1)
+		if (.not.flag) write(nflog,'(a,i3,2x,L)') 'idrug present?: ',idrug,chemo(ichemo)%present
 		if (.not.chemo(ichemo)%present) cycle
 		if (cp%drug_tag(idrug)) cycle	! don't tag more than once
 		dp => drug(idrug)
@@ -299,25 +302,33 @@ do kcell = 1,nlist
 		death_prob = 0
 		survival_prob = 1
 		do im = 0,2
+			if (.not.flag) write(nflog,*) 'im: ',im
 			if (.not.dp%kills(ityp,im)) cycle
 			killmodel = dp%kill_model(ityp,im)		! could use %drugclass to separate kill modes
 			Cdrug = cp%Cin(ichemo + im)
 			Kd = dp%Kd(ityp,im)
 			n_O2 = dp%n_O2(ityp,im)
 			kmet = (1 - dp%C2(ityp,im) + dp%C2(ityp,im)*dp%KO2(ityp,im)**n_O2/(dp%KO2(ityp,im)**n_O2 + C_O2**n_O2))*dp%Kmet0(ityp,im)
+			if (.not.flag) write(nflog,'(a,6e12.3)') 'kmet: ',dp%C2(ityp,im),dp%KO2(ityp,im),n_O2,C_O2,dp%Kmet0(ityp,im),kmet
 			dMdt = kmet*Cdrug
 			call getDrugKillProb(killmodel,Kd,dMdt,Cdrug,dt,dkill_prob)
+			if (.not.flag) then
+				write(nflog,'(a,5e12.3)') 'Cdrug,Kd,kmet,dMdt,dt: ',Cdrug,Kd,kmet,dMdt,dt
+				write(nflog,'(a,e12.3)') 'dkill_prob: ',dkill_prob
+			endif
 !			kill_prob = kill_prob + dkill_prob
 			survival_prob = survival_prob*(1 - dkill_prob)
 			death_prob = max(death_prob,dp%death_prob(ityp,im))
 		enddo
 		kill_prob = 1 - survival_prob
+		if (.not.flag) write(nflog,*) 'kill_prob: ',kill_prob
 	    if (par_uni(kpar) < kill_prob) then		
 			cp%p_drug_death(idrug) = death_prob
 			cp%drug_tag(idrug) = .true.
             Ndrug_tag(idrug,ityp) = Ndrug_tag(idrug,ityp) + 1
 		endif
 	enddo
+	flag = .true.
 enddo
 end subroutine
 
@@ -397,37 +408,6 @@ if (ngaps > max_ngaps) then
 endif
 gaplist(ngaps) = kcell
 end subroutine
-
-!-----------------------------------------------------------------------------------------
-!-----------------------------------------------------------------------------------------
-subroutine AddToMedium(cp,site)
-integer :: kcell, site(3)
-integer :: ichemo
-real(REAL_KIND) :: V, Cex(MAX_CHEMO), Cin(MAX_CHEMO)
-type(cell_type),pointer :: cp
-return
-
-!Cex = occupancy(site(1),site(2),site(3))%C
-Cin = cp%Cin
-V = cp%V
-do ichemo = 1,MAX_CHEMO
-	if (.not.chemo(ichemo)%used) cycle
-	chemo(ichemo)%medium_M = chemo(ichemo)%medium_M + V*Cin(ichemo) + (Vsite_cm3 - V)*Cex(ichemo)
-enddo
-end subroutine
-
-!-----------------------------------------------------------------------------------------
-!-----------------------------------------------------------------------------------------
-subroutine RemoveFromMedium
-integer :: ichemo
-
-do ichemo = 1,MAX_CHEMO
-	if (.not.chemo(ichemo)%used) cycle
-	if (chemo(ichemo)%constant) cycle
-	chemo(ichemo)%medium_M = chemo(ichemo)%medium_M - Vsite_cm3*chemo(ichemo)%medium_Cbnd
-enddo
-end subroutine
-
 
 !-----------------------------------------------------------------------------------------
 !-----------------------------------------------------------------------------------------
