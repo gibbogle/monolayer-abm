@@ -712,7 +712,7 @@ do im = 0,2
 		C(k) = chemo(ichemo)%Cmedium(i)
 	enddo
 enddo
-!write(nflog,*) 'drugsolver:'
+write(nflog,'(a,f8.4)') 'drugsolver: C(1): ',C(1)
 !write(nflog,'(63e12.5)') C(:)
 
 neqn = k

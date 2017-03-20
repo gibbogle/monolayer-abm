@@ -234,7 +234,7 @@ if (colony_simulation) then
 endif
 
 !tnow = istep*DELTA_T	! seconds
-!flag = .false.
+flag = .false.
 anoxia_death = chemo(OXYGEN)%controls_death
 aglucosia_death = chemo(GLUCOSE)%controls_death
 nlist0 = nlist
@@ -292,9 +292,9 @@ do kcell = 1,nlist
 		endif
 	endif
 	
-	do idrug = 1,ndrugs_used	
+	do idrug = 1,ndrugs_used
 		ichemo = DRUG_A + 3*(idrug-1)
-		if (.not.flag) write(nflog,'(a,i3,2x,L)') 'idrug present?: ',idrug,chemo(ichemo)%present
+!		if (.not.flag) write(nflog,'(a,i3,2x,L)') 'idrug present?: ',idrug,chemo(ichemo)%present
 		if (.not.chemo(ichemo)%present) cycle
 		if (cp%drug_tag(idrug)) cycle	! don't tag more than once
 		dp => drug(idrug)
@@ -302,8 +302,8 @@ do kcell = 1,nlist
 		death_prob = 0
 		survival_prob = 1
 		do im = 0,2
-			if (.not.flag) write(nflog,*) 'im: ',im
 			if (.not.dp%kills(ityp,im)) cycle
+			if (.not.flag) write(nflog,*) 'im: ',im
 			killmodel = dp%kill_model(ityp,im)		! could use %drugclass to separate kill modes
 			Cdrug = cp%Cin(ichemo + im)
 			Kd = dp%Kd(ityp,im)
@@ -327,8 +327,8 @@ do kcell = 1,nlist
 			cp%drug_tag(idrug) = .true.
             Ndrug_tag(idrug,ityp) = Ndrug_tag(idrug,ityp) + 1
 		endif
+		flag = .true.
 	enddo
-	flag = .true.
 enddo
 end subroutine
 

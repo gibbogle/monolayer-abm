@@ -540,6 +540,10 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
 "Growth fraction threshold 3",
 "Growth fraction threshold 3"},
 
+{"DRUG_THRESHOLD", 1.0e-6, 0, 0,
+"Drug Threshold",
+"Threshold drug concentration - when all intracellular and extracellular concentrations fall below this level, the drug concentrations everywhere are set to zero"},
+
 {"SPCRAD", 200.0, 0, 0,
 "Spectral radius",
 "Spectral radius value used by RKC solver"},

@@ -524,6 +524,7 @@ read(nfcell,*) hypoxia_threshold
 read(nfcell,*) growthcutoff(1)
 read(nfcell,*) growthcutoff(2)
 read(nfcell,*) growthcutoff(3)
+read(nfcell,*) Cthreshold
 read(nfcell,*) spcrad_value
 !read(nfcell,*) iuse_extra
 !read(nfcell,*) iuse_relax
@@ -1589,30 +1590,28 @@ endif
 
 bdry_debug = (istep >= 250000)
 
-!istep = istep + 1
-!!t_simulation = (istep-1)*DELTA_T	! seconds
-!t_simulation = istep*DELTA_T	! seconds
-!radiation_dose = 0
-!if (use_treatment) then     ! now we use events
-!	call treatment(radiation_dose)
-!endif
-!if (use_events) then
-!	call ProcessEvent(radiation_dose)
-!endif
-!if (radiation_dose > 0) then
-!	write(logmsg,'(a,f6.1)') 'Radiation dose: ',radiation_dose
-!	call logger(logmsg)
-!endif
+istep = istep + 1
+t_simulation = istep*DELTA_T	! seconds
+if (use_treatment) then     ! now we use events
+	call treatment(radiation_dose)
+endif
+if (use_events) then
+	call ProcessEvent(radiation_dose)
+endif
+if (radiation_dose > 0) then
+	write(logmsg,'(a,f6.1)') 'Radiation dose: ',radiation_dose
+	call logger(logmsg)
+endif
 !if (dbug) write(nflog,*) 'GrowCells'
 !call GrowCells(radiation_dose,DELTA_T,ok)
 !if (dbug) write(nflog,*) 'did GrowCells'
 !if (.not.ok) then
-!	res = 3
+!	res = 3 
 !	return
 !endif
+!radiation_dose = 0
 
 drug_gt_cthreshold = .false.
-
 if (medium_change_step) then
 	ndiv = 6
 	dt = DELTA_T/(NT_CONC*ndiv)
@@ -1625,6 +1624,14 @@ DELTA_T = DELTA_T/ndiv
 t_sim_0 = t_simulation
 do idiv = 0,ndiv-1
 	t_simulation = t_sim_0 + idiv*DELTA_T
+	if (dbug) write(nflog,*) 'GrowCells'
+	call GrowCells(radiation_dose,DELTA_T,ok)
+	if (dbug) write(nflog,*) 'did GrowCells'
+	if (.not.ok) then
+		res = 3
+		return
+	endif
+	radiation_dose = 0
 	if (dbug) write(nflog,*) 'Solver'
 	do it_solve = 1,NT_CONC
 		tstart = (it_solve-1)*dt
@@ -1649,27 +1656,27 @@ enddo
 DELTA_T = DELTA_T_save
 medium_change_step = .false.
 
-istep = istep + 1
-!t_simulation = (istep-1)*DELTA_T	! seconds
-t_simulation = istep*DELTA_T	! seconds
-radiation_dose = 0
-if (use_treatment) then     ! now we use events
-	call treatment(radiation_dose)
-endif
-if (use_events) then
-	call ProcessEvent(radiation_dose)
-endif
-if (radiation_dose > 0) then
-	write(logmsg,'(a,f6.1)') 'Radiation dose: ',radiation_dose
-	call logger(logmsg)
-endif
-if (dbug) write(nflog,*) 'GrowCells'
-call GrowCells(radiation_dose,DELTA_T,ok)
-if (dbug) write(nflog,*) 'did GrowCells'
-if (.not.ok) then
-	res = 3
-	return
-endif
+! Try moving this
+!istep = istep + 1
+!t_simulation = istep*DELTA_T	! seconds
+!radiation_dose = 0
+!if (use_treatment) then     ! now we use events
+!	call treatment(radiation_dose)
+!endif
+!if (use_events) then
+!	call ProcessEvent(radiation_dose)
+!endif
+!if (radiation_dose > 0) then
+!	write(logmsg,'(a,f6.1)') 'Radiation dose: ',radiation_dose
+!	call logger(logmsg)
+!endif
+!if (dbug) write(nflog,*) 'GrowCells'
+!call GrowCells(radiation_dose,DELTA_T,ok)
+!if (dbug) write(nflog,*) 'did GrowCells'
+!if (.not.ok) then
+!	res = 3
+!	return
+!endif
 
 
 !write(nfout,'(i6,f8.2,7e12.3)') istep,istep/real(nthour),Caverage(1),Caverage(5:7), &

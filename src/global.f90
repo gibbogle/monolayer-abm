@@ -317,7 +317,7 @@ real(REAL_KIND) :: doubling_time_sum
 type(cycle_parameters_type), target :: cc_parameters    ! possibly varies by cell type
 
 logical :: drug_gt_cthreshold(MAX_DRUGTYPES)
-real(REAL_KIND), parameter :: Cthreshold = 1.0e-8		! Note: decreased from 1.0e-6
+real(REAL_KIND) :: Cthreshold
 
 !type(savedata_type) :: saveprofile, saveslice
 
