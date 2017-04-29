@@ -8046,7 +8046,7 @@ padding: 8px
              <string>Fully mixed?</string>
             </property>
            </widget>
-           <widget class="QLineEdit" name="lineEdit">
+           <widget class="QLineEdit" name="line_DRUG_THRESHOLD">
             <property name="geometry">
              <rect>
               <x>820</x>
