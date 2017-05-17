@@ -19,6 +19,7 @@ extern Params *parm;	// I don't believe this is the right way, but it works
 //--------------------------------------------------------------------------------------------------------
 void MainWindow::on_comb_DRUG_A_currentIndexChanged(int index)
 {
+    if (comb_DRUG_A->currentIndex() == -1) return;
     QString filename = comb_DRUG_A->currentText();
     QString drugname = filename;
     QString cell_line;
@@ -42,6 +43,7 @@ void MainWindow::on_comb_DRUG_A_currentIndexChanged(int index)
 //--------------------------------------------------------------------------------------------------------
 void MainWindow::on_comb_DRUG_B_currentIndexChanged(int index)
 {
+    if (comb_DRUG_B->currentIndex() == -1) return;
     QString filename = comb_DRUG_B->currentText();
     QString drugname = filename;
     QString cell_line;
@@ -82,13 +84,15 @@ void MainWindow::on_cbox_USE_DRUG_A_toggled(bool checked)
     comb_DRUG_A->setEnabled(checked);
     text_DRUG_A_NAME->setEnabled(checked);
     radioButton_drugA->setEnabled(checked);
+    comb_DRUG_A->setCurrentIndex(-1);
     if (checked) {
         radioButton_drugA->setChecked(true);
+        /*
         QString drugname = comb_DRUG_A->currentText();
         extractDrugname(&drugname,&cell_line);
-        LOG_QMSG("drugname, cell_line: " + drugname + " " + cell_line);
         text_DRUG_A_NAME->setText(drugname);
         radioButton_drugA->setText(drugname);
+        */
         on_comb_DRUG_A_currentIndexChanged(0);
     } else {
         radioButton_drugA->setChecked(false);
@@ -97,7 +101,7 @@ void MainWindow::on_cbox_USE_DRUG_A_toggled(bool checked)
             radioButton_drugB->setChecked(true);
         }
         text_DRUG_A_NAME->setText("");
-        radioButton_drugA->setText("");
+        radioButton_drugA->setText("Drug A");
     }
 }
 
@@ -110,12 +114,15 @@ void MainWindow::on_cbox_USE_DRUG_B_toggled(bool checked)
     comb_DRUG_B->setEnabled(checked);
     text_DRUG_B_NAME->setEnabled(checked);
     radioButton_drugB->setEnabled(checked);
+    comb_DRUG_B->setCurrentIndex(-1);
     if (checked) {
         radioButton_drugB->setChecked(true);
+        /*
         QString drugname = comb_DRUG_B->currentText();
         extractDrugname(&drugname,&cell_line);
         text_DRUG_B_NAME->setText(drugname);
         radioButton_drugB->setText(drugname);
+        */
         on_comb_DRUG_B_currentIndexChanged(1);
     } else {
         radioButton_drugB->setChecked(false);
@@ -125,16 +132,9 @@ void MainWindow::on_cbox_USE_DRUG_B_toggled(bool checked)
             radioButton_drugA->setChecked(true);
         }
         text_DRUG_B_NAME->setText("");
-        radioButton_drugB->setText("");
+        radioButton_drugB->setText("Drug B");
     }
 }
-
-//--------------------------------------------------------------------------------------------------------
-//--------------------------------------------------------------------------------------------------------
-//void MainWindow::on_cbox_FULLY_MIXED_toggled(bool checked)
-//{
-
-//}
 
 //-----------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------
@@ -370,3 +370,5 @@ void MainWindow::clickedGraph(QMouseEvent *event)
         colony_plot->savePng(fileName);
     }
 }
+
+

@@ -369,6 +369,7 @@ void MainWindow::createActions()
 //    connect(buttonGroup_farfield, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(radioButtonChanged(QAbstractButton*)));
     connect(buttonGroup_hypoxia, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(radioButtonChanged(QAbstractButton*)));
 //    LOG_MSG("createActions 7");
+    ConnectKillParameterSignals();
 }
 
 //--------------------------------------------------------------------------------------------------------

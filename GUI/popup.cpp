@@ -4,6 +4,7 @@
 #include <QDebug>
 
 #include "plotwin.h"
+#include "drug.h"
 
 #define NPLOT 100
 
@@ -77,6 +78,7 @@ void MainWindow::pushButton_clicked()
 {
     int HMI_SCALE = 1;
     int cellType;
+    int idrug, kset, ictyp;
     QString title, plotType, plotName;
 
     QObject *senderObj = sender(); // This will give Sender object
@@ -157,22 +159,33 @@ void MainWindow::pushButton_clicked()
             plotName = "Drug Kill Fraction";
             plotwin->setWindowTitle(plotName);
             QString cellTypeStr, drugTypeStr;
+            if (radioButton_drugA->isChecked()) {
+                idrug = 0;
+            } else if (radioButton_drugB->isChecked()) {
+                idrug = 1;
+            }
             if (radioButton_drugcelltype_1->isChecked()) {
                 cellTypeStr = "CT1";
+                ictyp = 0;
             } else {
                 cellTypeStr = "CT2";
+                ictyp = 1;
             }
             if (radioButton_drugtype_1->isChecked()) {
                 drugTypeStr = "PARENT";
+                kset = 0;
             } else if (radioButton_drugtype_2->isChecked()) {
                 drugTypeStr = "METAB1";
+                kset = 1;
             } else {
                 drugTypeStr = "METAB2";
+                kset = 2;
             }
             QVector<double> x0(NPLOT), y0(NPLOT);
             double maxdrug;
             x0[0] = 1;
-            makeDrugPlot(drugTypeStr, cellTypeStr, &maxdrug, "KF", &x0, &y0);
+//            makeDrugPlot1(drugTypeStr, cellTypeStr, &maxdrug, "KF", &x0, &y0);
+            makeDrugPlot(idrug, kset, ictyp, &maxdrug, "KF", &x0, &y0);
             if (x0[0] == 1) return; // does not kill
             // create graph and assign data to it:
             popup_plot->addGraph();
@@ -192,22 +205,33 @@ void MainWindow::pushButton_clicked()
             plotName = "Drug Survival Fraction";
             plotwin->setWindowTitle(plotName);
             QString cellTypeStr, drugTypeStr;
+            if (radioButton_drugA->isChecked()) {
+                idrug = 0;
+            } else if (radioButton_drugB->isChecked()) {
+                idrug = 1;
+            }
             if (radioButton_drugcelltype_1->isChecked()) {
                 cellTypeStr = "CT1";
+                ictyp = 0;
             } else {
                 cellTypeStr = "CT2";
+                ictyp = 1;
             }
             if (radioButton_drugtype_1->isChecked()) {
                 drugTypeStr = "PARENT";
+                kset = 0;
             } else if (radioButton_drugtype_2->isChecked()) {
                 drugTypeStr = "METAB1";
+                kset = 1;
             } else {
                 drugTypeStr = "METAB2";
+                kset = 2;
             }
             QVector<double> x0(NPLOT), y0(NPLOT);
             double maxdrug;
             x0[0] = 1;
-            makeDrugPlot(drugTypeStr, cellTypeStr, &maxdrug, "SF", &x0, &y0);
+//            makeDrugPlot1(drugTypeStr, cellTypeStr, &maxdrug, "SF", &x0, &y0);
+            makeDrugPlot(idrug, kset, ictyp, &maxdrug, "SF", &x0, &y0);
             if (x0[0] == 1) return; // does not kill
             // create graph and assign data to it:
             popup_plot->addGraph();
@@ -229,22 +253,33 @@ void MainWindow::pushButton_clicked()
             plotName = "Drug + Radiation Survival Fraction";
             plotwin->setWindowTitle(plotName);
             QString cellTypeStr, drugTypeStr;
+            if (radioButton_drugA->isChecked()) {
+                idrug = 0;
+            } else if (radioButton_drugB->isChecked()) {
+                idrug = 1;
+            }
             if (radioButton_drugcelltype_1->isChecked()) {
                 cellTypeStr = "CT1";
+                ictyp = 0;
             } else {
                 cellTypeStr = "CT2";
+                ictyp = 1;
             }
             if (radioButton_drugtype_1->isChecked()) {
                 drugTypeStr = "PARENT";
+                kset = 0;
             } else if (radioButton_drugtype_2->isChecked()) {
                 drugTypeStr = "METAB1";
+                kset = 1;
             } else {
                 drugTypeStr = "METAB2";
+                kset = 2;
             }
             QVector<double> x0(NPLOT), y0(NPLOT);
             double maxO2;
             x0[0] = 1;
-            makeDrugRadiationPlot(drugTypeStr, cellTypeStr, &maxO2, "SF", &x0, &y0);
+//            makeDrugRadiationPlot1(drugTypeStr, cellTypeStr, &maxO2, "SF", &x0, &y0);
+            makeDrugRadiationPlot(idrug, kset, ictyp, &maxO2, "SF", &x0, &y0);
             if (x0[0] == 1) return; // does not kill
             // create graph and assign data to it:
             popup_plot->addGraph();
@@ -357,18 +392,12 @@ void MainWindow::makeSFPlot(QString cellTypeStr, double C_O2, double maxdose, QV
         (*x)[i] = dose;
         (*y)[i] = SF;
     }
-
-//    for (int i=0; i<101; ++i)
-//    {
-//      (*x)[i] = i/50.0 - 1; // x goes from -1 to 1
-//      (*y)[i] = (*x)[i]*(*x)[i];  // let's plot a quadratic function
-//    }
-
 }
 
 //--------------------------------------------------------------------------------------------------------
-// drugTypeStr = "PARENT", "METAB1", "METAB2"
-// cellTypeStr = "CT1", "CT2"
+// idrug = 0,1 (DRUG_A, DRUG_B)
+// kset = 0,1,2 ("PARENT", "METAB1", "METAB2")
+// ictyp = 0,1 ("CT1", "CT2")
 //
 // Parameter objectname numbers:
 //      Kmet0           0
@@ -381,19 +410,331 @@ void MainWindow::makeSFPlot(QString cellTypeStr, double C_O2, double maxdose, QV
 //      kill_drug       7
 //      kill_duration   8
 //      kill_fraction   9
-//      kills           13 --> 15
-//      Killmodel       14 --> 16
-// +
 //      n_O2            13
 //      death_prob      14
+//      Kd              15
+//      kills           16
+//      Killmodel       17
 //
 // Note that Kmet0, KO2, kill_duration need to be scaled to time units of sec
 //--------------------------------------------------------------------------------------------------------
-void MainWindow::makeDrugPlot(QString drugTypeStr, QString cellTypeStr, double *maxdose, QString plotStr, QVector<double> *x, QVector<double> *y)
+
+void MainWindow::makeDrugPlot(int idrug, int kset, int ictyp, double *maxdose, QString plotStr, QVector<double> *x, QVector<double> *y)
+{
+    QLineEdit *line;
+    int kills, killmodel, i;
+    double C_O2, C2, Kmet0, KO2, n_O2, Ckill_O2, f, T, Ckill, Kd, c, dt;
+    double Cdrug, kmet, dMdt, SF;   //, kill_prob;
+
+    i = KILL_kills - NDKILLPARAMS;
+    kills = drug[idrug].param[kset].kill[ictyp].iparam[i];
+    sprintf(msg,"makeDrugPlot: idrug, kset, ictyp: %d %d %d kills: %d",idrug,kset,ictyp,kills);
+    LOG_MSG(msg);
+    if (kills == 0) {
+        LOG_MSG("Does not kill");
+        return;     // Does not kill
+    }
+
+    i = KILL_expt_kill_model - NDKILLPARAMS;
+    killmodel = drug[idrug].param[kset].kill[ictyp].iparam[i];
+    Kmet0 = drug[idrug].param[kset].kill[ictyp].dparam[KILL_Kmet0];
+    Kmet0 = Kmet0/60;                       // /min -> /sec
+    C2 = drug[idrug].param[kset].kill[ictyp].dparam[KILL_C2];
+    KO2 = drug[idrug].param[kset].kill[ictyp].dparam[KILL_KO2];
+    KO2 = 1.0e-3*KO2;                       // um -> mM
+    n_O2 = drug[idrug].param[kset].kill[ictyp].dparam[KILL_NO2];
+    Ckill_O2 = drug[idrug].param[kset].kill[ictyp].dparam[KILL_expt_O2_conc];
+    Ckill = drug[idrug].param[kset].kill[ictyp].dparam[KILL_expt_drug_conc];
+    T = drug[idrug].param[kset].kill[ictyp].dparam[KILL_expt_duration];
+    T = 60*T;                               // min -> sec
+    f = drug[idrug].param[kset].kill[ictyp].dparam[KILL_expt_kill_fraction];
+    kmet = (1 - C2 + C2*pow(KO2,n_O2)/(pow(KO2,n_O2) + pow(Ckill_O2,n_O2)))*Kmet0;
+    Kd = drug[idrug].param[kset].kill[ictyp].dparam[KILL_Kd];
+
+//    printf("Kmet0: %f C2: %f KO2: %f Ckill_O2: %f Ckill: %f T: %f\n",Kmet0,C2,KO2,Ckill_O2,Ckill,T);
+//    if (killmodel == 1) {
+//        Kd = -log(1-f)/(T*kmet*Ckill);
+//    } else if (killmodel == 2) {
+//        Kd = -log(1-f)/(T*kmet*pow(Ckill,2));
+//    } else if (killmodel == 3) {
+//        Kd = -log(1-f)/(T*pow(kmet*Ckill,2));
+//    } else if (killmodel == 4) {
+//        Kd = -log(1-f)/(T*Ckill);
+//    } else if (killmodel == 5) {
+//        Kd = -log(1-f)/(T*pow(Ckill,2));
+//    }
+
+    line = findChild<QLineEdit *>("lineEdit_drug_O2");
+    C_O2 = line->text().toDouble();
+    line = findChild<QLineEdit *>("lineEdit_maxdrugconc");
+    *maxdose = line->text().toDouble(); // * to return this value
+    kmet = (1 - C2 + C2*pow(KO2,n_O2)/(pow(KO2,n_O2) + pow(C_O2,n_O2)))*Kmet0;
+
+    sprintf(msg,"Kmet0: %f kmet: %f Kd: %f C_O2: %f maxdose: %f",Kmet0,kmet,Kd,C_O2,*maxdose);
+    LOG_MSG(msg);
+//    dt = 1;    // 1 sec
+    for (int i=0; i<NPLOT; i++) {
+        Cdrug = (i*(*maxdose)/(NPLOT-1));
+        dMdt = kmet*Cdrug;
+        if (killmodel == 1) {
+            c = Kd*dMdt;
+        } else if (killmodel == 2) {
+            c = Kd*dMdt*Cdrug;
+        } else if (killmodel == 3) {
+            c = Kd*pow(dMdt,2);
+        } else if (killmodel == 4) {
+            c = Kd*Cdrug;
+        } else if (killmodel == 5) {
+            c = Kd*pow(Cdrug,2);
+        }
+        SF = exp(-c*3600);      // 3600 sec = 1 hour
+        (*x)[i] = Cdrug;
+        if (plotStr == "KF")
+            (*y)[i] = (1 - SF);
+        else
+            (*y)[i] = SF;
+    }
+//    qDebug("maxdose: %8.4f  SF: %12.6f",*maxdose,SF);
+}
+
+
+//--------------------------------------------------------------------------------------------------------
+void MainWindow::makeDrugRadiationPlot(int idrug, int kset, int ictyp, double *maxO2, QString plotStr, QVector<double> *x, QVector<double> *y)
+{
+    QLineEdit *line;
+    QString cellTypeNum;
+    int kills, killmodel, i;
+    double C_O2, C2, Kmet0, KO2, n_O2, Ckill_O2, f, T, Ckill, Kd, c;
+    double Cdrug, rad_dose, kmet, dMdt, SF_drug, SF_rad, SF;
+
+    i = KILL_kills - NDKILLPARAMS;
+    kills = drug[idrug].param[kset].kill[ictyp].iparam[i];
+    sprintf(msg,"makeDrugRadiationPlot: idrug, kset, ictyp: %d %d %d kills: %d",idrug,kset,ictyp,kills);
+    LOG_MSG(msg);
+    if (kills == 0) {
+        LOG_MSG("Does not kill");
+        return;     // Does not kill
+    }
+
+    i = KILL_expt_kill_model - NDKILLPARAMS;
+    killmodel = drug[idrug].param[kset].kill[ictyp].iparam[i];
+
+    Kmet0 = drug[idrug].param[kset].kill[ictyp].dparam[KILL_Kmet0];
+    Kmet0 = Kmet0/60;                       // /min -> /sec
+    C2 = drug[idrug].param[kset].kill[ictyp].dparam[KILL_C2];
+    KO2 = drug[idrug].param[kset].kill[ictyp].dparam[KILL_KO2];
+    KO2 = 1.0e-3*KO2;                       // um -> mM
+    n_O2 = drug[idrug].param[kset].kill[ictyp].dparam[KILL_NO2];
+    Ckill_O2 = drug[idrug].param[kset].kill[ictyp].dparam[KILL_expt_O2_conc];
+    Ckill = drug[idrug].param[kset].kill[ictyp].dparam[KILL_expt_drug_conc];
+    T = drug[idrug].param[kset].kill[ictyp].dparam[KILL_expt_duration];
+    T = 60*T;                               // min -> sec
+    f = drug[idrug].param[kset].kill[ictyp].dparam[KILL_expt_kill_fraction];
+    kmet = (1 - C2 + C2*pow(KO2,n_O2)/(pow(KO2,n_O2) + pow(Ckill_O2,n_O2)))*Kmet0;
+    Kd = drug[idrug].param[kset].kill[ictyp].dparam[KILL_Kd];
+
+    line = findChild<QLineEdit *>("lineEdit_drug_O2");
+    *maxO2 = line->text().toDouble();
+    line = findChild<QLineEdit *>("lineEdit_maxdrugconc");
+    Cdrug = line->text().toDouble(); // * to return this value
+    sprintf(msg,"Kmet0: %f Kd: %f maxO2: %f Cdrug: %f",Kmet0,Kd,*maxO2,Cdrug);
+    LOG_MSG(msg);
+
+    cellTypeNum = QString::number(ictyp+1);
+    QString objAlphaName = "line_RADIATION_ALPHA_H_" + cellTypeNum;
+    QString objBetaName = "line_RADIATION_BETA_H_" + cellTypeNum;
+    QString objOERAlphaName = "line_RADIATION_OER_ALPHA_" + cellTypeNum;
+    QString objOERBetaName = "line_RADIATION_OER_BETA_" + cellTypeNum;
+    QString objKmName = "line_RADIATION_KM_" + cellTypeNum;
+    line = findChild<QLineEdit *>(objAlphaName);
+    double LQ_alpha_H = line->text().toDouble();
+    line = findChild<QLineEdit *>(objBetaName);
+    double LQ_beta_H = line->text().toDouble();
+    line = findChild<QLineEdit *>(objOERAlphaName);
+    double LQ_OER_am = line->text().toDouble();
+    line = findChild<QLineEdit *>(objOERBetaName);
+    double LQ_OER_bm = line->text().toDouble();
+    line = findChild<QLineEdit *>(objKmName);
+    double LQ_K_ms = line->text().toDouble();
+    double SER = 1;
+
+    line = findChild<QLineEdit *>("lineEdit_radiationdose");
+    rad_dose = line->text().toDouble();
+
+    for (int i=0; i<NPLOT; i++) {
+        C_O2 = (i*(*maxO2)/(NPLOT-1));
+        kmet = (1 - C2 + C2*pow(KO2,n_O2)/(pow(KO2,n_O2) + pow(C_O2,n_O2)))*Kmet0;
+        dMdt = kmet*Cdrug;
+        if (killmodel == 1) {
+            c = Kd*dMdt;
+        } else if (killmodel == 2) {
+            c = Kd*dMdt*Cdrug;
+        } else if (killmodel == 3) {
+            c = Kd*pow(dMdt,2);
+        } else if (killmodel == 4) {
+            c = Kd*Cdrug;
+        } else if (killmodel == 5) {
+            c = Kd*pow(Cdrug,2);
+        }
+        SF_drug = exp(-c*3600);      // 3600 sec = 1 hour
+//        sprintf(msg,"i: %d C_O2: %f kmet: %f dMdt: %f c: %f SF_drug: %f",i,C_O2,kmet,dMdt,c,SF_drug);
+//        LOG_MSG(msg);
+
+        double OER_alpha_d = rad_dose*(LQ_OER_am*C_O2 + LQ_K_ms)/(C_O2 + LQ_K_ms);
+        double OER_beta_d = rad_dose*(LQ_OER_bm*C_O2 + LQ_K_ms)/(C_O2 + LQ_K_ms);
+
+        OER_alpha_d = OER_alpha_d*SER;
+        OER_beta_d = OER_beta_d*SER;
+
+        double expon = LQ_alpha_H*OER_alpha_d + LQ_beta_H*pow(OER_beta_d,2);
+        SF_rad = exp(-expon);
+
+        SF = SF_rad*SF_drug;
+        (*x)[i] = C_O2;
+        if (plotStr == "KF")
+            (*y)[i] = (1 - SF);
+        else
+            (*y)[i] = SF;
+    }
+    LOG_MSG("Done");
+}
+
+
+//--------------------------------------------------------------------------------------------------------
+// The net survival fraction is the product of the survival fractions from the radiation dose and from the drug.
+// NOT USED
+//--------------------------------------------------------------------------------------------------------
+void MainWindow::makeDrugRadiationPlot1(QString drugTypeStr, QString cellTypeStr, double *maxO2, QString plotStr, QVector<double> *x, QVector<double> *y)
+{
+    QLineEdit *line;
+    QString objName0, objName, cellTypeNum;
+    int killmodel;
+    double C_O2, C2, Kmet0, KO2, n_O2, Ckill_O2, f, T, Ckill, Kd, c;
+    double Cdrug, rad_dose, kmet, dMdt, SF_drug, SF_rad, SF;   //, kill_prob;
+
+    objName = "cbox_" + drugTypeStr + "_" + cellTypeStr + "_15";
+    QCheckBox *cbox = findChild<QCheckBox *>(objName);
+    if (!cbox->isChecked()) {
+        LOG_MSG("Does not kill");
+        return;     // Does not kill
+    }
+//    qDebug("makeDrugRadiationPlot");
+    cellTypeNum = cellTypeStr.mid(2,1);
+    objName0 = "line_" + drugTypeStr + "_" + cellTypeStr + "_";
+    objName = objName0 + "16";
+    line = findChild<QLineEdit *>(objName);
+    killmodel = line->text().toInt();
+    objName = objName0 + "0";
+    line = findChild<QLineEdit *>(objName);
+    Kmet0 = line->text().toDouble();
+    Kmet0 = Kmet0/60;                       // /min -> /sec
+    objName = objName0 + "1";
+    line = findChild<QLineEdit *>(objName);
+    C2 = line->text().toDouble();
+    objName = objName0 + "2";
+    line = findChild<QLineEdit *>(objName);
+    KO2 = line->text().toDouble();
+    KO2 = 1.0e-3*KO2;                       // um -> mM
+    objName = objName0 + "13";
+    line = findChild<QLineEdit *>(objName);
+    n_O2 = line->text().toDouble();
+    objName = objName0 + "6";
+    line = findChild<QLineEdit *>(objName);
+    Ckill_O2 = line->text().toDouble();     // kill_O2
+    objName = objName0 + "7";
+    line = findChild<QLineEdit *>(objName);
+    Ckill = line->text().toDouble();        // kill_drug
+    objName = objName0 + "8";
+    line = findChild<QLineEdit *>(objName);
+    T = line->text().toDouble();            // kill_duration
+    T = 60*T;                               // min -> sec
+//    qDebug("Kmet0: %f C2: %f KO2: %f Ckill_O2: %f Ckill: %f T: %f",Kmet0,C2,KO2,Ckill_O2,Ckill,T);
+
+    objName = objName0 + "9";
+    line = findChild<QLineEdit *>(objName);
+    f = line->text().toDouble();            // kill_fraction
+
+    kmet = (1 - C2 + C2*pow(KO2,n_O2)/(pow(KO2,n_O2) + pow(Ckill_O2,n_O2)))*Kmet0;
+    if (killmodel == 1) {
+        Kd = -log(1-f)/(T*kmet*Ckill);
+    } else if (killmodel == 2) {
+        Kd = -log(1-f)/(T*kmet*pow(Ckill,2));
+    } else if (killmodel == 3) {
+        Kd = -log(1-f)/(T*pow(kmet*Ckill,2));
+    } else if (killmodel == 4) {
+        Kd = -log(1-f)/(T*Ckill);
+    } else if (killmodel == 5) {
+        Kd = -log(1-f)/(T*pow(Ckill,2));
+    }
+
+    line = findChild<QLineEdit *>("lineEdit_drug_O2");
+    *maxO2 = line->text().toDouble();
+    line = findChild<QLineEdit *>("lineEdit_maxdrugconc");
+    Cdrug = line->text().toDouble();
+
+    QString objAlphaName = "line_RADIATION_ALPHA_H_" + cellTypeNum;
+    QString objBetaName = "line_RADIATION_BETA_H_" + cellTypeNum;
+    QString objOERAlphaName = "line_RADIATION_OER_ALPHA_" + cellTypeNum;
+    QString objOERBetaName = "line_RADIATION_OER_BETA_" + cellTypeNum;
+    QString objKmName = "line_RADIATION_KM_" + cellTypeNum;
+    line = findChild<QLineEdit *>(objAlphaName);
+    double LQ_alpha_H = line->text().toDouble();
+    line = findChild<QLineEdit *>(objBetaName);
+    double LQ_beta_H = line->text().toDouble();
+    line = findChild<QLineEdit *>(objOERAlphaName);
+    double LQ_OER_am = line->text().toDouble();
+    line = findChild<QLineEdit *>(objOERBetaName);
+    double LQ_OER_bm = line->text().toDouble();
+    line = findChild<QLineEdit *>(objKmName);
+    double LQ_K_ms = line->text().toDouble();
+    double SER = 1;
+
+    line = findChild<QLineEdit *>("lineEdit_radiationdose");
+    rad_dose = line->text().toDouble();
+
+    for (int i=0; i<NPLOT; i++) {
+        C_O2 = (i*(*maxO2)/(NPLOT-1));
+        kmet = (1 - C2 + C2*pow(KO2,n_O2)/(pow(KO2,n_O2) + pow(C_O2,n_O2)))*Kmet0;
+        dMdt = kmet*Cdrug;
+        if (killmodel == 1) {
+            c = Kd*dMdt;
+        } else if (killmodel == 2) {
+            c = Kd*dMdt*Cdrug;
+        } else if (killmodel == 3) {
+            c = Kd*pow(dMdt,2);
+        } else if (killmodel == 4) {
+            c = Kd*Cdrug;
+        } else if (killmodel == 5) {
+            c = Kd*pow(Cdrug,2);
+        }
+        SF_drug = exp(-c*3600);      // 3600 sec = 1 hour
+
+        double OER_alpha_d = rad_dose*(LQ_OER_am*C_O2 + LQ_K_ms)/(C_O2 + LQ_K_ms);
+        double OER_beta_d = rad_dose*(LQ_OER_bm*C_O2 + LQ_K_ms)/(C_O2 + LQ_K_ms);
+
+        OER_alpha_d = OER_alpha_d*SER;
+        OER_beta_d = OER_beta_d*SER;
+
+        double expon = LQ_alpha_H*OER_alpha_d + LQ_beta_H*pow(OER_beta_d,2);
+        SF_rad = exp(-expon);
+
+        SF = SF_rad*SF_drug;
+        (*x)[i] = C_O2;
+        if (plotStr == "KF")
+            (*y)[i] = (1 - SF);
+        else
+            (*y)[i] = SF;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------------
+// NOT USED
+//--------------------------------------------------------------------------------------------------------
+void MainWindow::makeDrugPlot1(QString drugTypeStr, QString cellTypeStr, double *maxdose, QString plotStr, QVector<double> *x, QVector<double> *y)
 {
     QLineEdit *line;
     QString objName0, objName;
-    int killmodel;
+    int idrug, kset, ictyp, killmodel;
     double C_O2, C2, Kmet0, KO2, n_O2, Ckill_O2, f, T, Ckill, Kd, c, dt;
     double Cdrug, kmet, dMdt, SF;   //, kill_prob;
 
@@ -536,130 +877,4 @@ elseif (killmodel == 5) then
     kill_prob = kill_prob + Kd*(cell_list(kcell)%conc(ichemo + im)**2)*dt
 endif
 */
-}
-
-//--------------------------------------------------------------------------------------------------------
-// The net survival fraction is the product of the survival fractions from the radiation dose and from the drug.
-//--------------------------------------------------------------------------------------------------------
-void MainWindow::makeDrugRadiationPlot(QString drugTypeStr, QString cellTypeStr, double *maxO2, QString plotStr, QVector<double> *x, QVector<double> *y)
-{
-    QLineEdit *line;
-    QString objName0, objName, cellTypeNum;
-    int killmodel;
-    double C_O2, C2, Kmet0, KO2, n_O2, Ckill_O2, f, T, Ckill, Kd, c;
-    double Cdrug, rad_dose, kmet, dMdt, SF_drug, SF_rad, SF;   //, kill_prob;
-
-    objName = "cbox_" + drugTypeStr + "_" + cellTypeStr + "_15";
-    QCheckBox *cbox = findChild<QCheckBox *>(objName);
-    if (!cbox->isChecked()) {
-        LOG_MSG("Does not kill");
-        return;     // Does not kill
-    }
-//    qDebug("makeDrugRadiationPlot");
-    cellTypeNum = cellTypeStr.mid(2,1);
-    objName0 = "line_" + drugTypeStr + "_" + cellTypeStr + "_";
-    objName = objName0 + "16";
-    line = findChild<QLineEdit *>(objName);
-    killmodel = line->text().toInt();
-    objName = objName0 + "0";
-    line = findChild<QLineEdit *>(objName);
-    Kmet0 = line->text().toDouble();
-    Kmet0 = Kmet0/60;                       // /min -> /sec
-    objName = objName0 + "1";
-    line = findChild<QLineEdit *>(objName);
-    C2 = line->text().toDouble();
-    objName = objName0 + "2";
-    line = findChild<QLineEdit *>(objName);
-    KO2 = line->text().toDouble();
-    KO2 = 1.0e-3*KO2;                       // um -> mM
-    objName = objName0 + "13";
-    line = findChild<QLineEdit *>(objName);
-    n_O2 = line->text().toDouble();
-    objName = objName0 + "6";
-    line = findChild<QLineEdit *>(objName);
-    Ckill_O2 = line->text().toDouble();     // kill_O2
-    objName = objName0 + "7";
-    line = findChild<QLineEdit *>(objName);
-    Ckill = line->text().toDouble();        // kill_drug
-    objName = objName0 + "8";
-    line = findChild<QLineEdit *>(objName);
-    T = line->text().toDouble();            // kill_duration
-    T = 60*T;                               // min -> sec
-//    qDebug("Kmet0: %f C2: %f KO2: %f Ckill_O2: %f Ckill: %f T: %f",Kmet0,C2,KO2,Ckill_O2,Ckill,T);
-
-    objName = objName0 + "9";
-    line = findChild<QLineEdit *>(objName);
-    f = line->text().toDouble();            // kill_fraction
-
-    kmet = (1 - C2 + C2*pow(KO2,n_O2)/(pow(KO2,n_O2) + pow(Ckill_O2,n_O2)))*Kmet0;
-    if (killmodel == 1) {
-        Kd = -log(1-f)/(T*kmet*Ckill);
-    } else if (killmodel == 2) {
-        Kd = -log(1-f)/(T*kmet*pow(Ckill,2));
-    } else if (killmodel == 3) {
-        Kd = -log(1-f)/(T*pow(kmet*Ckill,2));
-    } else if (killmodel == 4) {
-        Kd = -log(1-f)/(T*Ckill);
-    } else if (killmodel == 5) {
-        Kd = -log(1-f)/(T*pow(Ckill,2));
-    }
-
-    line = findChild<QLineEdit *>("lineEdit_drug_O2");
-    *maxO2 = line->text().toDouble();
-    line = findChild<QLineEdit *>("lineEdit_maxdrugconc");
-    Cdrug = line->text().toDouble();
-
-    QString objAlphaName = "line_RADIATION_ALPHA_H_" + cellTypeNum;
-    QString objBetaName = "line_RADIATION_BETA_H_" + cellTypeNum;
-    QString objOERAlphaName = "line_RADIATION_OER_ALPHA_" + cellTypeNum;
-    QString objOERBetaName = "line_RADIATION_OER_BETA_" + cellTypeNum;
-    QString objKmName = "line_RADIATION_KM_" + cellTypeNum;
-    line = findChild<QLineEdit *>(objAlphaName);
-    double LQ_alpha_H = line->text().toDouble();
-    line = findChild<QLineEdit *>(objBetaName);
-    double LQ_beta_H = line->text().toDouble();
-    line = findChild<QLineEdit *>(objOERAlphaName);
-    double LQ_OER_am = line->text().toDouble();
-    line = findChild<QLineEdit *>(objOERBetaName);
-    double LQ_OER_bm = line->text().toDouble();
-    line = findChild<QLineEdit *>(objKmName);
-    double LQ_K_ms = line->text().toDouble();
-    double SER = 1;
-
-    line = findChild<QLineEdit *>("lineEdit_radiationdose");
-    rad_dose = line->text().toDouble();
-
-    for (int i=0; i<NPLOT; i++) {
-        C_O2 = (i*(*maxO2)/(NPLOT-1));
-        kmet = (1 - C2 + C2*pow(KO2,n_O2)/(pow(KO2,n_O2) + pow(C_O2,n_O2)))*Kmet0;
-        dMdt = kmet*Cdrug;
-        if (killmodel == 1) {
-            c = Kd*dMdt;
-        } else if (killmodel == 2) {
-            c = Kd*dMdt*Cdrug;
-        } else if (killmodel == 3) {
-            c = Kd*pow(dMdt,2);
-        } else if (killmodel == 4) {
-            c = Kd*Cdrug;
-        } else if (killmodel == 5) {
-            c = Kd*pow(Cdrug,2);
-        }
-        SF_drug = exp(-c*3600);      // 3600 sec = 1 hour
-
-        double OER_alpha_d = rad_dose*(LQ_OER_am*C_O2 + LQ_K_ms)/(C_O2 + LQ_K_ms);
-        double OER_beta_d = rad_dose*(LQ_OER_bm*C_O2 + LQ_K_ms)/(C_O2 + LQ_K_ms);
-
-        OER_alpha_d = OER_alpha_d*SER;
-        OER_beta_d = OER_beta_d*SER;
-
-        double expon = LQ_alpha_H*OER_alpha_d + LQ_beta_H*pow(OER_beta_d,2);
-        SF_rad = exp(-expon);
-
-        SF = SF_rad*SF_drug;
-        (*x)[i] = C_O2;
-        if (plotStr == "KF")
-            (*y)[i] = (1 - SF);
-        else
-            (*y)[i] = SF;
-    }
 }

@@ -335,9 +335,9 @@ write(nfres,'(a,a,2a12,i8,e12.4,22i7,36e12.4,i6)') trim(header),' ',gui_run_vers
 	cmedium(OXYGEN), cmedium(GLUCOSE), cmedium(DRUG_A:DRUG_A+2), cmedium(DRUG_B:DRUG_B+2), &
 	doubling_time, ndivided
 
-write(nflog,'(a,2e12.3)') 'caverage(OXYGEN), caverage(GLUCOSE): ',caverage(OXYGEN), caverage(GLUCOSE)
-write(nflog,'(a,3e12.3)') 'caverage(DRUG_A:DRUG_A+2): ',caverage(DRUG_A:DRUG_A+2)	
-write(nflog,'(a,3e12.3)') 'caverage(DRUG_B:DRUG_B+2): ',caverage(DRUG_B:DRUG_B+2)	
+!write(nflog,'(a,2e12.3)') 'caverage(OXYGEN), caverage(GLUCOSE): ',caverage(OXYGEN), caverage(GLUCOSE)
+!write(nflog,'(a,3e12.3)') 'caverage(DRUG_A:DRUG_A+2): ',caverage(DRUG_A:DRUG_A+2)	
+!write(nflog,'(a,3e12.3)') 'caverage(DRUG_B:DRUG_B+2): ',caverage(DRUG_B:DRUG_B+2)	
 !call sum_dMdt(GLUCOSE)
 ndoublings = 0
 doubling_time_sum = 0

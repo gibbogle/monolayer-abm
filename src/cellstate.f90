@@ -221,7 +221,7 @@ subroutine CellDeath(dt,ok)
 real(REAL_KIND) :: dt
 logical :: ok
 integer :: kcell, nlist0, site(3), i, ichemo, idrug, im, ityp, killmodel, kpar=0 
-real(REAL_KIND) :: C_O2, C_glucose, Cdrug, n_O2, kmet, Kd, dMdt, kill_prob, dkill_prob, death_prob, survival_prob
+real(REAL_KIND) :: C_O2, C_glucose, Cdrug, n_O2, kmet, Kd, dMdt, kill_prob, dkill_prob, death_prob, survival_prob, R
 logical :: anoxia_death, aglucosia_death
 type(drug_type), pointer :: dp
 type(cell_type), pointer :: cp
@@ -292,6 +292,7 @@ do kcell = 1,nlist
 		endif
 	endif
 	
+	flag = (kcell == 1)
 	do idrug = 1,ndrugs_used
 		ichemo = DRUG_A + 3*(idrug-1)
 !		if (.not.flag) write(nflog,'(a,i3,2x,L)') 'idrug present?: ',idrug,chemo(ichemo)%present
@@ -303,16 +304,16 @@ do kcell = 1,nlist
 		survival_prob = 1
 		do im = 0,2
 			if (.not.dp%kills(ityp,im)) cycle
-			if (.not.flag) write(nflog,*) 'im: ',im
+			if (flag) write(nflog,*) 'kcell,im: ',kcell,im
 			killmodel = dp%kill_model(ityp,im)		! could use %drugclass to separate kill modes
 			Cdrug = cp%Cin(ichemo + im)
 			Kd = dp%Kd(ityp,im)
 			n_O2 = dp%n_O2(ityp,im)
 			kmet = (1 - dp%C2(ityp,im) + dp%C2(ityp,im)*dp%KO2(ityp,im)**n_O2/(dp%KO2(ityp,im)**n_O2 + C_O2**n_O2))*dp%Kmet0(ityp,im)
-			if (.not.flag) write(nflog,'(a,6e12.3)') 'kmet: ',dp%C2(ityp,im),dp%KO2(ityp,im),n_O2,C_O2,dp%Kmet0(ityp,im),kmet
+			if (flag) write(nflog,'(a,6e12.3)') 'kmet: ',dp%C2(ityp,im),dp%KO2(ityp,im),n_O2,C_O2,dp%Kmet0(ityp,im),kmet
 			dMdt = kmet*Cdrug
 			call getDrugKillProb(killmodel,Kd,dMdt,Cdrug,dt,dkill_prob)
-			if (.not.flag) then
+			if (flag) then
 				write(nflog,'(a,5e12.3)') 'Cdrug,Kd,kmet,dMdt,dt: ',Cdrug,Kd,kmet,dMdt,dt
 				write(nflog,'(a,e12.3)') 'dkill_prob: ',dkill_prob
 			endif
@@ -321,13 +322,13 @@ do kcell = 1,nlist
 			death_prob = max(death_prob,dp%death_prob(ityp,im))
 		enddo
 		kill_prob = 1 - survival_prob
-		if (.not.flag) write(nflog,*) 'kill_prob: ',kill_prob
-	    if (par_uni(kpar) < kill_prob) then		
+		R = par_uni(kpar)
+		if (flag) write(nflog,*) 'kill_prob: ',kcell,kill_prob,R
+	    if (R < kill_prob) then	
 			cp%p_drug_death(idrug) = death_prob
 			cp%drug_tag(idrug) = .true.
             Ndrug_tag(idrug,ityp) = Ndrug_tag(idrug,ityp) + 1
 		endif
-		flag = .true.
 	enddo
 enddo
 end subroutine

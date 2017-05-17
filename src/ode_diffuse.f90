@@ -258,6 +258,7 @@ do im = 0,2
     membrane_kin = chemo(ichemo)%membrane_diff_in
     membrane_kout = chemo(ichemo)%membrane_diff_out
 	membrane_flux = area_factor*(membrane_kin*Cex - membrane_kout*C)
+	dCreact = 0
     if (im == 0) then
         if (metabolised(ict,0) .and. C > 0) then
 		    KmetC = dp%Kmet0(ict,0)*C

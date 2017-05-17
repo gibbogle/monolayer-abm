@@ -692,7 +692,9 @@ Nsteps = days*24*60*60/DELTA_T		! DELTA_T in seconds
 write(logmsg,'(a,2i6,f6.0)') 'nsteps, NT_CONC, DELTA_T: ',nsteps,NT_CONC,DELTA_T
 call logger(logmsg)
 
-call DetermineKd
+if (.not.use_new_drugdata) then
+	call DetermineKd	! Kd is now set or computed in the GUI 
+endif
 ndivided = 0
 ok = .true.
 
@@ -792,6 +794,9 @@ do idrug = 1,Ndrugs_used
             read(nf,*) drug(idrug)%SER_KO2(ictyp,im)
             read(nf,*) drug(idrug)%n_O2(ictyp,im)
             read(nf,*) drug(idrug)%death_prob(ictyp,im)
+            if (use_new_drugdata) then
+	            read(nf,*) drug(idrug)%Kd(ictyp,im)
+	        endif
             read(nf,*) ival
             drug(idrug)%kills(ictyp,im) = (ival == 1)
             read(nf,*) ival
@@ -1329,7 +1334,8 @@ real(REAL_KIND) :: V, C(MAX_CHEMO)
 type(event_type) :: E
 
 !write(logmsg,*) 'ProcessEvent'
-!call logger(logmsg)
+!call logger(logmsg) 
+radiation_dose = 0
 do kevent = 1,Nevents
 	E = event(kevent)
 	if (t_simulation >= E%time .and. .not.E%done) then
@@ -1475,16 +1481,17 @@ Caverage(MAX_CHEMO+1:2*MAX_CHEMO) = mass/(total_volume - Vcells)
 write(nflog,'(a,13f8.4)') 'Caverage: ',Caverage(MAX_CHEMO+1:2*MAX_CHEMO)
 
 chemo(OXYGEN)%bdry_conc = Ce(OXYGEN)
-call SetOxygenLevels
 chemo(GLUCOSE)%Cmedium = Caverage(MAX_CHEMO+GLUCOSE)
 do idrug = 1,2
 	iparent = DRUG_A + 3*(idrug-1)
 	do im = 0,2
 		ichemo = iparent + im	
 		chemo(ichemo)%Cmedium = Caverage(MAX_CHEMO+ichemo)
+		Caverage(ichemo) = Caverage(MAX_CHEMO+ichemo)	! this is a measure to overcome convergence problem on 1st time step
 		write(nflog,'(a,4i3,e12.3)') 'idrug,iparent,im,ichemo,Cmedium: ',idrug,iparent,im,ichemo,chemo(ichemo)%Cmedium(1)
 	enddo
 enddo
+call SetOxygenLevels	! also sets drug levels in cells 
 t_lastmediumchange = istep*DELTA_T
 medium_change_step = .true.
 write(nflog,*)
@@ -1500,7 +1507,7 @@ end subroutine
 ! average O2 concentration = (Cbnd + Cex)/2
 !-----------------------------------------------------------------------------------------
 subroutine SetOxygenLevels
-integer :: ichemo, k, kcell
+integer :: ichemo, k, kcell, idrug, im, iparent
 real(REAL_KIND) :: Kin, Kout, Kd, Cex, Cin, Cbnd, A, d, flux, Cin_prev, alpha
 real(REAL_KIND) :: tol = 1.0e-6
 
@@ -1535,7 +1542,15 @@ do k = 1,N1D
 enddo
 do kcell = 1,nlist
     if (cell_list(kcell)%state == DEAD) cycle
-    cell_list(kcell)%Cin(ichemo) = Cin
+    cell_list(kcell)%Cin(OXYGEN) = Cin
+	do idrug = 1,2
+		iparent = DRUG_A + 3*(idrug-1)
+		do im = 0,2
+			ichemo = iparent + im
+			if (.not.chemo(ichemo)%present) cycle
+			cell_list(kcell)%Cin(ichemo) = chemo(ichemo)%Cmedium(1)		! set IC conc to initial medium conc
+		enddo
+	enddo
 enddo
 	
 end subroutine
@@ -1599,7 +1614,7 @@ if (use_events) then
 	call ProcessEvent(radiation_dose)
 endif
 if (radiation_dose > 0) then
-	write(logmsg,'(a,f6.1)') 'Radiation dose: ',radiation_dose
+	write(logmsg,*) 'Radiation dose: ',radiation_dose
 	call logger(logmsg)
 endif
 !if (dbug) write(nflog,*) 'GrowCells'

@@ -371,6 +371,7 @@ logical :: use_constant_divide_volume = .true.
 logical :: use_volume_method
 logical :: use_cell_cycle
 logical :: use_constant_growthrate = .false. 
+logical :: use_new_drugdata = .true.
 logical :: randomise_initial_volume
 logical :: is_radiation
 !logical :: use_FD = .true.
