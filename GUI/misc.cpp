@@ -206,9 +206,9 @@ void ExecThread::run()
 //    LOG_MSG("did tester");
 //    emit run_tester();
 
-//    get_summary(Global::summaryData, &Global::i_hypoxia_cutoff, &Global::i_growth_cutoff);
+    get_summary(Global::summaryData, &Global::i_hypoxia_cutoff, &Global::i_growth_cutoff);
 //    getProfiles();
-//    emit summary(hour);		// Emit signal to initialise summary plots
+    emit summary(hour);		// Emit signal to initialise summary plots
 
     for (int i=1; i <= nsteps+1; i++) {
         sleep(10);

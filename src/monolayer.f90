@@ -1605,7 +1605,7 @@ endif
 
 bdry_debug = (istep >= 250000)
 
-istep = istep + 1
+!istep = istep + 1
 t_simulation = istep*DELTA_T	! seconds
 if (use_treatment) then     ! now we use events
 	call treatment(radiation_dose)
@@ -1713,6 +1713,9 @@ endif
 ! write(nflog,'(a,f8.3)') 'did simulate_step: time: ',wtime()-start_wtime
 
 !call showcell(39)
+
+istep = istep + 1
+
 end subroutine
 
 !-----------------------------------------------------------------------------------------
