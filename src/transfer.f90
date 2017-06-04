@@ -56,10 +56,10 @@ end subroutine
 
 !--------------------------------------------------------------------------------
 !--------------------------------------------------------------------------------
-subroutine get_dimensions(nsteps_dim, deltat, maxchemo, nextra, cused) BIND(C)
+subroutine get_dimensions(nsteps_dim, deltat, ntdisplay, maxchemo, nextra, cused) BIND(C)
 !DEC$ ATTRIBUTES DLLEXPORT :: get_dimensions
 use, intrinsic :: iso_c_binding
-integer(c_int) :: nsteps_dim, maxchemo, nextra
+integer(c_int) :: nsteps_dim, ntdisplay, maxchemo, nextra
 real(c_double) :: deltat
 logical(c_bool) :: cused(*)
 integer :: ichemo
@@ -67,6 +67,7 @@ integer :: ichemo
 write(nflog,*) 'get_dimensions: MAX_CHEMO: ',MAX_CHEMO
 nsteps_dim = nsteps
 deltat = DELTA_T
+ntdisplay = NT_DISPLAY
 maxchemo = MAX_CHEMO
 nextra = N_EXTRA
 do ichemo = 1,MAX_CHEMO

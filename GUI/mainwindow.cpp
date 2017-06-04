@@ -1981,7 +1981,7 @@ void MainWindow::runServer()
 	// Port 5000
 	sthread0 = new SocketHandler(CPORT0);
 	connect(sthread0, SIGNAL(sh_output(QString)), box_outputLog, SLOT(append(QString))); //self.outputLog)
-	connect(sthread0, SIGNAL(sh_connected()), this, SLOT(preConnection()));
+//	connect(sthread0, SIGNAL(sh_connected()), this, SLOT(preConnection()));
 	connect(sthread0, SIGNAL(sh_disconnected()), this, SLOT(postConnection()));
 	sthread0->start();
 //	vtk->cleanup();
@@ -2006,7 +2006,7 @@ void MainWindow::runServer()
     connect(this, SIGNAL(facs_update()), this, SLOT(showFACS()));
     connect(exthread, SIGNAL(histo_update()), this, SLOT(showHisto()));
     connect(this, SIGNAL(histo_update()), this, SLOT(showHisto()));
-    connect(exthread, SIGNAL(setupC()), this, SLOT(setupConstituents()));
+    connect(exthread, SIGNAL(setupC(int)), this, SLOT(setupConstituents(int)));
     connect(exthread, SIGNAL(badDLL(QString)), this, SLOT(reportBadDLL(QString)));
     exthread->ncpu = ncpu;
     exthread->nsteps = int(hours*60/Global::DELTA_T);
@@ -2019,11 +2019,14 @@ void MainWindow::runServer()
 
 
 //--------------------------------------------------------------------------------------------------------
+// Need to size pData[], and for this need nsteps = number of points on ts plot
+// This depends on NDAYS and DT_DISPLAY = NT_DISPLAY*DELTA_T
 //--------------------------------------------------------------------------------------------------------
-void MainWindow::preConnection()
+void MainWindow::preConnection(int nplot_times)
 {
 	LOG_MSG("preConnection");
 
+    /*
     double hours = 0;
 	for (int k=0; k<parm->nParams; k++) {
 		PARAM_SET p = parm->get_param(k);
@@ -2033,14 +2036,17 @@ void MainWindow::preConnection()
 		}
 	}
 	// We assume that the model output is at hourly intervals
+    */
 	newR = new RESULT_SET;
 	QString casename = QFileInfo(inputFile).baseName();
 	vtkfile = casename + ".pos";
 	newR->casename = casename;
     LOG_QMSG(newR->casename);
-	int nsteps = int(hours+1.5);
+//	int nsteps = int(hours+1.5);
+    int nsteps = nplot_times;
 	newR->nsteps = nsteps;
 	newR->tnow = new double[nsteps];
+    newR->max_time = nsteps*Global::DELTA_T*Global::NT_DISPLAY/3600;   // hours
 
     for (int i=0; i<grph->nGraphs; i++) {
  //       if (!grph->isActive(i)) continue;
@@ -2057,7 +2063,7 @@ void MainWindow::preConnection()
     LOG_MSG("did initializeGraphs");
     Global::nhisto_bins = lineEdit_nhistobins->text().toInt();
     posdata = false;
-	LOG_MSG("preconnection: done");
+    LOG_MSG("preconnection (not really): done");
 }
 
 //--------------------------------------------------------------------------------------------------------
@@ -2132,8 +2138,9 @@ void MainWindow::initializeGraphs(RESULT_SET *R)
 
 	for (int i=0; i<nGraphs; i++) {
         if (!grph->isTimeseries(i)) continue;
-        pGraph[i]->setAxisScale(QwtPlot::xBottom, 0, R->nsteps, 0);
-	}
+//        pGraph[i]->setAxisScale(QwtPlot::xBottom, 0, R->nsteps, 0);
+        pGraph[i]->setAxisScale(QwtPlot::xBottom, 0, R->max_time, 0);
+    }
     Global::dist_nv = 20;
 }
 
@@ -2217,7 +2224,8 @@ void MainWindow::showSummary(int hr)
 	hour_display->setText(hourstr);
 
     Global::casename = newR->casename;
-    newR->tnow[step] = step;
+    double dtstep = Global::NT_DISPLAY*Global::DELTA_T;
+    newR->tnow[step] = step*dtstep/3600;    // tnow in hours
 
     // TS plots
 	for (int i=0; i<nGraphs; i++) {
@@ -3170,7 +3178,7 @@ int SliderPlus::nTicks() {
 // the field constituent DLL indexes are in the range 1 to MAX_CHEMO, since the extra
 // variables not applicable in the extracellular compartment.
 //-----------------------------------------------------------------------------------------
-void MainWindow::setupConstituents()
+void MainWindow::setupConstituents(int ndisplay)
 {
     int nvarlen, narraylen;
     char *name_array;
@@ -3217,6 +3225,7 @@ void MainWindow::setupConstituents()
     field->setMaxConcentrations(groupBox_maxconc);
     LOG_MSG("did setMaxConcentrations");
 
+    preConnection(ndisplay);
 }
 
 //--------------------------------------------------------------------------------------------------------

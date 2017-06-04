@@ -142,7 +142,7 @@ private slots:
     double computeCkill(int idrug, int kset, int ictyp);
 
 public slots:
-	void preConnection();
+    void preConnection(int nplot_times);
 	void outputData(QString);
 	void postConnection();
 //	void timer_update();
@@ -167,7 +167,7 @@ public slots:
     void buttonClick_canvas(QAbstractButton* button);
     void textChanged_fraction(QString text);
 	void textEdited_fraction(QString text);
-    void setupConstituents();
+    void setupConstituents(int ndisplay);
 
     void on_cbox_USE_DRUG_A_toggled(bool checked);
     void on_cbox_USE_DRUG_B_toggled(bool checked);

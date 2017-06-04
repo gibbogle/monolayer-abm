@@ -70,6 +70,7 @@ namespace Global
     extern int N_EXTRA;
     extern int NX, NY, NZ;
     extern double DELTA_T;
+    extern int NT_DISPLAY;
     extern double DELTA_X;
     extern double dfraction;
     extern int nt_vtk;

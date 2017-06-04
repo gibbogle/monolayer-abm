@@ -9,6 +9,7 @@ namespace Global
     int N_EXTRA;
     int NX, NY, NZ;
     double DELTA_T;
+    int NT_DISPLAY;
     double DELTA_X;
     double dfraction;
     int nt_vtk;

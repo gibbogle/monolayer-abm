@@ -67,7 +67,7 @@ signals:
     void display();
 //    void displayF();
     void summary(int);
-    void setupC();
+    void setupC(int);
     void facs_update();
     void histo_update();
     void run_tester();

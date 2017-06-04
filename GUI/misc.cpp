@@ -95,7 +95,7 @@ void SocketHandler::processor()
     socket = tcpServer->nextPendingConnection();
 	sprintf(msg,"got server connection: %p",socket);	
 	LOG_MSG(msg);
-    emit sh_connected();
+    emit sh_connected();      // try moving this (wgich triggers PreConnection()) to Run (after get_dimensions)
 	QString qdata;
 	QByteArray ba;
 	ba.resize(1024);
@@ -189,17 +189,20 @@ void ExecThread::run()
 //    get_string(&b);
 //    LOG_MSG(b);
 
-    get_dimensions(&nsteps, &Global::DELTA_T, &Global::MAX_CHEMO, &Global::N_EXTRA, cused);
-    summary_interval = int(3600./Global::DELTA_T);
+    get_dimensions(&nsteps, &Global::DELTA_T, &Global::NT_DISPLAY, &Global::MAX_CHEMO, &Global::N_EXTRA, cused);
+//    summary_interval = int(3600./Global::DELTA_T);
+    summary_interval = Global::NT_DISPLAY;
     sprintf(msg,"exthread: nsteps: %d summary_interval: %d",nsteps,summary_interval);
     LOG_MSG(msg);
     Global::conc_nc_ic = 0;
     Global::conc_nc_ex = 0;
     hour = 0;
 
+    int ndisplay = nsteps/Global::NT_DISPLAY + 1;
     mutex1.lock();
-    emit setupC();
+    emit setupC(ndisplay);
     mutex1.unlock();
+    LOG_MSG("did setupC");
 
 //    LOG_MSG("call tester");
 //    tester();
@@ -254,7 +257,8 @@ void ExecThread::run()
                 emit facs_update();
                 emit histo_update();
             }
-            hour++;
+//            hour++;
+            hour = int(hour + (Global::DELTA_T*Global::NT_DISPLAY)/3600.);
             mutex1.lock();
             emit summary(hour);		// Emit signal to update summary plots, at hourly intervals
         }
