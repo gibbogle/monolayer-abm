@@ -51,7 +51,8 @@ logical :: is_drug
 is_drug = .false.
 expstr = str
 if (str /= 'RADIATION') then
-	expstr = trim(str)//'_EC'
+!	expstr = trim(str)//'_EC'
+	expstr = 'DRUG_A_EC'
 	is_drug = .true.
 endif
 kvar = 0
@@ -155,7 +156,7 @@ character*(128) :: line
 character*(50) :: str50
 character*(12) :: str12
 character*(48) :: arg(16)
-character*(48) :: paramstr, event, drugstr
+character*(48) :: paramstr, event, drugstr, drugname
 integer :: nargs, nprot, kpar, nfnew = 20
 real(REAL_KIND) :: dose, pval
 logical :: protocol, first_rad_dose, first_drug_dose, normal
@@ -173,14 +174,18 @@ do
 	str50 = line(1:50)
 	call parse(str50,' ',arg,nargs)
 	if (nargs == 1) then
-!		write(*,'(a)') str50
 		protocol = .true.
 		paramstr = arg(1)
 	else
 		paramstr = arg(2)
 	endif
 	! Now see if the paramstr is in the parameter list.  
-	! In the case of protocol we need to look for a parameter ID with '_EC' appended, if it is a drug.
+	! In the case of protocol:
+	! The parameter ID will be of the form "DRUG_A_EC", "DRUG_A_METAB1_EC" etc
+	! In fact the protocol drug name will be something like "SN30000", "PR104A" etc
+	! We need to be able to associate the drug name with the drug dose line in the expt data
+	! If we assume that only a single drug will ever be used in these experiments, then
+	! we just need to look for "DRUG_A_EC"
 	if (protocol) then
 		if (first_rad_dose .and. paramstr == 'RADIATION') then
 			normal = .false.
@@ -210,12 +215,12 @@ do
 		endif
 		if (first_rad_dose .and. event == 'RADIATION' .and. nprot == 3) then
 			!dose = radiation dose for experiment(iexp)
-			write(paramstr,'(f8.3)') dose
+			write(paramstr,'(f9.3)') dose
 			paramstr = adjustl(paramstr)
 		endif
 		if (first_drug_dose .and. event == 'DRUG' .and. nprot == 8) then
 			!dose = drug dose for experiment(iexp)
-			write(paramstr,'(f8.3)') dose
+			write(paramstr,'(f9.5)') dose
 			paramstr = adjustl(paramstr)
 		endif
 		if (normal) then
@@ -247,6 +252,7 @@ do
 			str50 = adjustl(str12) // trim(arg(2))
 		endif
 		write(nfnew,'(a)') adjustl(str50)
+!		write(nfitlog,'(a,a)') 'parameter set: ',adjustl(str50)
 	endif
 enddo
 99 continue
@@ -374,13 +380,22 @@ endif
 ! Set up sampling time steps, nearest DELTA_T
 do i = 1,pexp%ntimes
 	it = (60*60*pexp%t(i))/DELTA_T + 0.5
-	pexp%itsim(i) = max(it,1)
+	pexp%itsim(i) = it		!max(it,1)
 enddo
 ! Run the simulation
 t1 = wtime()
 nsumm_interval = (60*60)/DELTA_T   ! number of time steps per hour
 !write(*,*) 'nsumm_interval: ',nsumm_interval
-do jstep = 1,Nsteps
+do jstep = 0,Nsteps-1
+	do i = 1,pexp%ntimes
+		if (pexp%itsim(i) == jstep) then
+			call get_values(pexp%nvars,pexp%varID(:),pexp%ysim(i,:))
+			write(nfitlog,'(a,2i4,f8.2)') 'time: ',i,jstep,pexp%itsim(i)*DELTA_T/(60*60)
+			do k = 1,pexp%nvars
+				write(nfitlog,'(i3,a32,e12.3)') k,pexp%varID(k),pexp%ysim(i,k)
+			enddo
+		endif
+	enddo
 	call simulate_step(res)
 	if (mod(jstep,nsumm_interval) == 0) then
 		call get_summary(summarydata,i_hypoxia_cutoff,i_growth_cutoff)
@@ -389,16 +404,8 @@ do jstep = 1,Nsteps
 		write(*,*) 'Error exit: ',res
 		stop
 	endif
-	do i = 1,pexp%ntimes
-		if (pexp%itsim(i) == jstep) then
-			call get_values(pexp%nvars,pexp%varID(:),pexp%ysim(i,:))
-!			write(nfitlog,'(a,i4,f8.2)') 'time: ',jstep,pexp%itsim(i)*DELTA_T/(60*60)
-!			do k = 1,pexp%nvars
-!				write(nfitlog,'(i3,a32,e12.3)') k,pexp%varID(k),pexp%ysim(i,k)
-!			enddo
-		endif
-	enddo
 enddo
+
 !if (simulate_colony) then
 !	call make_colony_distribution(colony_days,dist,ddist,ndist)
 !	do idist = 1,ndist
@@ -418,6 +425,7 @@ real(REAL_KIND) :: dfobj
 real(REAL_KIND) :: dv, dv2
 integer :: it, ivar
 type(experiment_type), pointer :: pexp
+logical :: use_abs = .true.
 
 pexp => experiment(iexp)
 
@@ -427,15 +435,29 @@ do it = 1,pexp%ntimes
 		if (pexp%y(it,ivar) == -1 .or. pexp%ysim(it,ivar) == -1) cycle	! missing value
 		if (pexp%is_dose(it,ivar)) cycle
 		dv = pexp%y(it,ivar) - pexp%ysim(it,ivar)
-!		write(*,'(2i4,3e12.3)') it,ivar,pexp%y(it,ivar),pexp%ysim(it,ivar),dv
+		write(nfitlog,'(2i4,3e12.3)') it,ivar,pexp%y(it,ivar),pexp%ysim(it,ivar),dv
 		if (pexp%y(it,ivar) == 0) then
 			if (pexp%ysim(it,ivar) /= 0) then
-				dv2 = dv*dv/pexp%ysim(it,ivar)
+				if (use_abs) then
+					dv2 = abs(dv/pexp%ysim(it,ivar))
+				else
+!					dv2 = dv*dv/pexp%ysim(it,ivar)
+					dv2 = (dv/pexp%ysim(it,ivar))**2
+				endif
 			else
 				dv2 = 0
 			endif
 		else
-			dv2 = dv*dv/pexp%y(it,ivar)
+			if (pexp%ysim(it,ivar) /= 0) then
+				if (use_abs) then
+					dv2 = abs(dv/pexp%ysim(it,ivar))
+				else
+!					dv2 = dv*dv/pexp%y(it,ivar)
+					dv2 = (dv/pexp%y(it,ivar))**2
+				endif
+			else
+				dv2 = 0
+			endif
 		endif
 		if (isnan(dv2)) then
 			write(*,'(2i4,3e12.3)') it,ivar,pexp%y(it,ivar),pexp%ysim(it,ivar),dv2
