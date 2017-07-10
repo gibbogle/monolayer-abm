@@ -774,6 +774,7 @@ do im = 0,2
 enddo
 write(nflog,'(a,3e12.3)') 'IC drug conc: ',(Caverage(DRUG_A+k),k=0,2)
 write(nflog,'(a,3e12.3)') 'EC drug conc: ',(Caverage(MAX_CHEMO + DRUG_A+k),k=0,2)
+write(nflog,'(a,2i4,3e12.3)') 'Cin: ',iparent,DRUG_A,cell_list(1)%Cin(iparent:iparent+2)
 
 end subroutine
 

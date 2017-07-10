@@ -808,7 +808,8 @@ do idrug = 1,Ndrugs_used
             drug(idrug)%kill_model(ictyp,im) = ival
             read(nf,*) ival
             drug(idrug)%sensitises(ictyp,im) = (ival == 1)
-            drug(idrug)%Kmet0(ictyp,im) = drug(idrug)%Kmet0(ictyp,im)/60					! /min -> /sec
+            write(nflog,'(a,3i4,2f8.4)') 'Kmet0,Kd read: ',idrug,im,ictyp,drug(idrug)%Kmet0(ictyp,im),drug(idrug)%Kd(ictyp,im)
+            drug(idrug)%Kmet0(ictyp,im) = drug(idrug)%Kmet0(ictyp,im)/60					! /min -> /sec 
             drug(idrug)%KO2(ictyp,im) = 1.0e-3*drug(idrug)%KO2(ictyp,im)					! um -> mM
             drug(idrug)%kill_duration(ictyp,im) = 60*drug(idrug)%kill_duration(ictyp,im)	! min -> sec
 		enddo
@@ -1548,14 +1549,15 @@ enddo
 do kcell = 1,nlist
     if (cell_list(kcell)%state == DEAD) cycle
     cell_list(kcell)%Cin(OXYGEN) = Cin
-	do idrug = 1,2
-		iparent = DRUG_A + 3*(idrug-1)
-		do im = 0,2
-			ichemo = iparent + im
-			if (.not.chemo(ichemo)%present) cycle
-			cell_list(kcell)%Cin(ichemo) = chemo(ichemo)%Cmedium(1)		! set IC conc to initial medium conc
-		enddo
-	enddo
+! What is this doing here???
+!	do idrug = 1,2
+!		iparent = DRUG_A + 3*(idrug-1) 
+!		do im = 0,2
+!			ichemo = iparent + im
+!			if (.not.chemo(ichemo)%present) cycle
+!			cell_list(kcell)%Cin(ichemo) = chemo(ichemo)%Cmedium(1)		! set IC conc to initial medium conc
+!		enddo
+!	enddo
 enddo
 	
 end subroutine

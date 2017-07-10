@@ -1213,7 +1213,7 @@ subroutine get_values(nvars,varID,ysim)
 !DEC$ ATTRIBUTES DLLEXPORT :: get_values
 integer :: nvars
 character*(24) :: varID(nvars)
-real(REAL_KIND) :: ysim(nvars)
+real(REAL_KIND) :: ysim(nvars), cscale = 1000
 integer :: ivar, ityp
 integer :: Nviable(MAX_CELLTYPES), Nlive(MAX_CELLTYPES)
 real(REAL_KIND) :: plate_eff(MAX_CELLTYPES)
@@ -1226,17 +1226,17 @@ do ivar = 1,nvars
 	elseif (varID(ivar) == 'LACTATE_EC') then
 		ysim(ivar) = Cmediumave(LACTATE)
 	elseif (varID(ivar) == 'DRUG_A_EC') then
-		ysim(ivar) = Cmediumave(DRUG_A)
+		ysim(ivar) = cscale*Cmediumave(DRUG_A)
 	elseif (varID(ivar) == 'DRUG_A_METAB1_EC') then
-		ysim(ivar) = Cmediumave(DRUG_A+1)
+		ysim(ivar) = cscale*Cmediumave(DRUG_A+1)
 	elseif (varID(ivar) == 'DRUG_A_METAB2_EC') then
-		ysim(ivar) = Cmediumave(DRUG_A+2)
+		ysim(ivar) = cscale*Cmediumave(DRUG_A+2)
 	elseif (varID(ivar) == 'DRUG_B_EC') then
-		ysim(ivar) = Cmediumave(DRUG_B)
+		ysim(ivar) = cscale*Cmediumave(DRUG_B)
 	elseif (varID(ivar) == 'DRUG_B_METAB1_EC') then
-		ysim(ivar) = Cmediumave(DRUG_B+1)
+		ysim(ivar) = cscale*Cmediumave(DRUG_B+1)
 	elseif (varID(ivar) == 'DRUG_B_METAB2_EC') then
-		ysim(ivar) = Cmediumave(DRUG_B+2)
+		ysim(ivar) = cscale*Cmediumave(DRUG_B+2)
 	elseif (varID(ivar) == 'OXYGEN_IC') then
 		ysim(ivar) = Caverage(OXYGEN)
 	elseif (varID(ivar) == 'GLUCOSE_IC') then
@@ -1244,17 +1244,17 @@ do ivar = 1,nvars
 	elseif (varID(ivar) == 'LACTATE_IC') then
 		ysim(ivar) = Caverage(LACTATE)
 	elseif (varID(ivar) == 'DRUG_A_IC') then
-		ysim(ivar) = Caverage(DRUG_A)
+		ysim(ivar) = cscale*Caverage(DRUG_A)
 	elseif (varID(ivar) == 'DRUG_A_METAB1_IC') then
-		ysim(ivar) = Caverage(DRUG_A+1)
+		ysim(ivar) = cscale*Caverage(DRUG_A+1)
 	elseif (varID(ivar) == 'DRUG_A_METAB2_IC') then
-		ysim(ivar) = Caverage(DRUG_A+2)
+		ysim(ivar) = cscale*Caverage(DRUG_A+2)
 	elseif (varID(ivar) == 'DRUG_B_IC') then
-		ysim(ivar) = Caverage(DRUG_B)
+		ysim(ivar) = cscale*Caverage(DRUG_B)
 	elseif (varID(ivar) == 'DRUG_B_METAB1_IC') then
-		ysim(ivar) = Caverage(DRUG_B+1)
+		ysim(ivar) = cscale*Caverage(DRUG_B+1)
 	elseif (varID(ivar) == 'DRUG_B_METAB2_IC') then
-		ysim(ivar) = Caverage(DRUG_B+2)
+		ysim(ivar) = cscale*Caverage(DRUG_B+2)
 	elseif (varID(ivar) == 'NCELLS') then
 		ysim(ivar) = Ncells			! for now, total live cells
 	elseif (varID(ivar) == 'PE') then
