@@ -18,7 +18,7 @@ type parameter_type
 end type	
 
 type experiment_type
-	character*(6) :: ID
+	character*(24) :: expID
 	integer :: nvars, ntimes
 	character*(24), allocatable :: varID(:)		! this must agree with size in monolayer > transfer.f90 > subroutine get_values
 	integer, allocatable :: varnum(:)
@@ -39,7 +39,8 @@ character*(128) :: template_infile, infile, outfile, logfile, paramfile, exptfil
 type(experiment_type), allocatable, target :: experiment(:)
 type(parameter_type), target :: param(0:max_params)
 real(REAL_KIND) :: weight(10)	! we assume nvars <= 10
-logical :: use_logPE
+logical :: input_varID(10)
+logical :: use_log
 
 contains
 
@@ -154,10 +155,49 @@ enddo
 close(nfin)
 end subroutine
 
+subroutine checkvarID(p, paramstr, ivar)
+type(experiment_type), pointer :: p
+character*(48) :: paramstr
+integer :: ivar
+integer :: i
+character*(48) :: varstr
+
+if (trim(paramstr) == 'INITIAL_COUNT') then
+	varstr = 'NCELLS'
+elseif (trim(paramstr) == 'OXYGEN_BDRY_CONC') then
+	varstr = 'OXYGEN_EC'
+elseif (trim(paramstr) == 'GLUCOSE_BDRY_CONC') then
+	varstr = 'GLUCOSE_EC'
+elseif (trim(paramstr) == 'LACTATE_BDRY_CONC') then
+	varstr = 'LACTATE_EC'
+else
+	ivar = 0
+	return
+endif
+do i = 1,p%nvars
+	if (trim(varstr) == trim(p%varID(i))) then
+		ivar = i
+		return
+	endif
+enddo
+ivar = 0
+end subroutine
+
 !----------------------------------------------------------------------------
 ! Protocol:
 !  DRUG dose comes at nprot=7, RADIATION at nprot=3
-! Note that drug dose is converted from uM to mM for the model
+! Experimentally measured variables that can also be input values are:
+!
+! varID			Input parameter name
+! -----			--------------------
+! NCELLS		INITIAL_COUNT
+! OXYGEN_EC     OXYGEN_BDRY_CONC
+! GLUCOSE_EC    GLUCOSE_BDRY_CONC
+! LACTATE_EC    LACTATE_BDRY_CONC
+!
+! Protocol:
+! DRUG_A_EC
+
 !----------------------------------------------------------------------------
 subroutine create_input(iexp,nfin,old_infile,new_infile)
 integer :: iexp, nfin
@@ -166,14 +206,13 @@ character*(128) :: line
 character*(50) :: str50
 character*(12) :: str12
 character*(48) :: arg(16)
-character*(24) :: str24
 character*(48) :: paramstr, event, drugstr, drugname
 integer :: nargs, nprot, kpar, ivar, nfnew = 20
-real(REAL_KIND) :: dose, pval, val, cscale = 0.001	! convert uM -> mM
+real(REAL_KIND) :: dose, pval
 logical :: protocol, first_rad_dose, first_drug_dose, normal
-type(experiment_type), pointer :: pexp
+type(experiment_type), pointer :: p
 
-pexp => experiment(iexp)
+p => experiment(iexp)
 open(nfin,file=old_infile,status='old')
 open(nfnew,file=new_infile,status='replace')
 protocol = .false.
@@ -219,7 +258,6 @@ do
 		if (event /= ' ') nprot = nprot + 1
 		if (first_drug_dose .and. event == 'DRUG' .and. nprot == 2) then		! paramstr is the drug name
 			dose = exp_var_dose(iexp,paramstr)
-			dose = cscale*dose
 			if (dose <= 0) then
 				event = ' '
 				normal = .true.
@@ -259,18 +297,14 @@ do
 			endif
 		endif
 	else
-		! Check for match with one of the non-treatment expt varIDs
-!		write(*,*) 'paramstr: ',paramstr
-		if (trim(adjustl(paramstr)) == 'INITIAL_COUNT') then
-			write(*,*) 'hit varID for NCELLS: ',paramstr
-			call get_exp_value(iexp,'NCELLS', val)
-			write(*,*) 'NCELLS val: ',val
-			if (val > 0) then
-				write(str24,'(i)') int(val)
-				write(nfnew,'(a)') adjustl(trim(str24))//'   INITIAL_COUNT'
-			else
-				write(nfnew,'(a)') adjustl(str50)
-			endif
+		! Need to check if a varID is also an input, if so need to set the input value to the first time value y(1,k)
+		call checkvarID(p, paramstr, ivar)
+		if (ivar > 0) then	! parameter is a varID
+			write(*,*) 'input_varID true: ',ivar
+			input_varID(ivar) = .true.
+			pval = p%y(1,ivar)
+			write(str12,'(e12.3)') pval
+			str50 = adjustl(str12) // trim(arg(2))
 		else
 			kpar = get_param_num(paramstr)
 			if (kpar >= 0) then
@@ -278,34 +312,16 @@ do
 				write(str12,'(e12.3)') pval
 				str50 = adjustl(str12) // trim(arg(2))
 			endif
-			write(nfnew,'(a)') adjustl(str50)
-!			write(nfitlog,'(a,a)') 'parameter set: ',adjustl(str50)
 		endif
+		write(nfnew,'(a)') adjustl(str50)
+!		write(nfitlog,'(a,a)') 'parameter set: ',adjustl(str50)
 	endif
 enddo
 99 continue
 close(nfin)
 close(nfnew)
-!stop
-end subroutine
+write(*,*) 'Wrote input file'
 
-!----------------------------------------------------------------------------
-!----------------------------------------------------------------------------
-subroutine get_exp_value(iexp, paramstr, val)
-integer :: iexp
-character*(*) :: paramstr
-real(REAL_KIND) :: val
-integer :: ivar
-type(experiment_type), pointer :: pexp
-
-pexp => experiment(iexp)
-do ivar = 1,pexp%nvars
-	if (trim(pexp%varID(ivar)) == trim(paramstr)) then
-		val = pexp%y(1,ivar)
-		return
-	endif
-enddo
-val = -1
 end subroutine
 
 !----------------------------------------------------------------------------
@@ -318,97 +334,85 @@ end subroutine
 !	space + comma ' ,' is treated as a comma ','
 !	fields are delimitted by ','
 !	missing value ',,' is parsed to return the string ' ', which is given the floating point value -1
-! Using a string for the experiment ID
-! Added 'Y' for start of experiment to be included, 'N' for start of experiment to be excluded
 !----------------------------------------------------------------------------
 subroutine read_expt(nf,filename)
 integer :: nf
 character*(48) :: filename
 character*(128) :: line
 character*(48) :: arg(16)
-character*(6) :: expID, yes='Y', no='N', arg1, arg2
+character*(24) :: expID, varID(10)
 integer :: nargs, nvarsmax
-integer :: iexp, it, i, k, col0
+integer :: iexp, it, i, k, inc, nvars
 real(REAL_KIND) :: val
-logical :: skip
 type(experiment_type), pointer :: p
 
+input_varID = .false.
 open(nf,file=filename,status='old')
-!read(nf,'(a)') line
-!call parse(line,', ',arg,nargs)
-!read(arg(1),'(i)') Nexpts
 
-! Do not assume Nexpts is in the file
+read(nf,'(a)',end=99) line
+write(*,*) 'line: ',line
+call parse(line,', ',arg,nargs)
+!read(arg(1),'(i)') Nexpts
+use_log = (arg(1) == 'Y' .or. arg(1) == 'y')
+nvars = nargs - 3
+do i = 1, nvars
+	varID(i) = arg(i+3)
+enddo
 read(nf,*)
+! Now determine Nexpts
 Nexpts = 0
-do
-	read(nf,'(a)',end=88) line
+expID = ' '
+do 
+	read(nf,'(a)',end=299) line
 	if (len(trim(line)) == 0) cycle
 	call parse(line,', ',arg,nargs)
-	arg2 = arg(2)(1:6)
-	if (arg2 == yes) then
+	if (trim(arg(1)) /= trim(expID)) then
 		Nexpts = Nexpts + 1
+		expID = arg(1)
 	endif
 enddo
-88 continue
+299 continue
 close(nf)
-write(nfitlog,*) 'Nexpts: ',Nexpts
+write(*,*) 'Nexpts: ',Nexpts
 allocate(experiment(Nexpts))
 
 open(nf,file=filename,status='old')
-read(nf,'(a)') line
-call parse(line,', ',arg,nargs)
-arg1 = arg(1)(1:6)
-use_logPE = (arg1 == yes)
-write(nfitlog,*) 'use_logPE: ',use_logPE
+read(nf,*)
 nvarsmax = 0
 do iexp = 1,Nexpts
 	p => experiment(iexp)
-	p%nvars = nargs - 3
+	p%nvars = nvars
 	allocate(p%varID(p%nvars))
 	p%ntimes = 0
 	do i = 1,p%nvars
-		p%varID(i) = arg(i+3)
+		p%varID(i) = varID(i)
 	enddo
+	write(*,*) 'iexp, p%nvars: varID(1)',iexp,p%nvars,p%varID(1)
 	nvarsmax = max(nvarsmax,p%nvars)
 enddo
+write(*,*) 'nvarsmax: ',nvarsmax
 read(nf,*) weight(1:nvarsmax)
-do iexp = 1,Nexpts
-	write(nfitlog,*) 'exp, nvars: ',iexp,experiment(iexp)%nvars
-enddo
-
 iexp = 0
 expID = ' '
-skip = .false.
 do
 	read(nf,'(a)',end=99) line
 	if (len(trim(line)) == 0) cycle
 	call parse(line,', ',arg,nargs)
 !	read(arg(1),'(i)') iexp
-	arg2 = arg(2)(1:6)
-!	if (expID /= arg(1)(1:6)) then
-	if (arg2 == yes) then
+	if (trim(arg(1)) /= trim(expID)) then
 		iexp = iexp + 1
-		expID = arg(1)(1:6)
-		experiment(iexp)%ID = expID
-		skip = .false.
+		expID = arg(1)
+		p => experiment(iexp)
+		p%expID = expID
 	endif
-	if (arg2 == no) then
-		skip = .true.
-	endif
-	if (skip) cycle
-	p => experiment(iexp)
 	p%ntimes = p%ntimes + 1
 enddo
 99 continue
 close(nf)
 
 do iexp = 1,Nexpts
-	write(nfitlog,*) 'exp, ntimes: ',iexp,experiment(iexp)%ntimes
-enddo
-
-do iexp = 1,Nexpts
 	p => experiment(iexp)
+	write(*,*) 'expt: ntimes: ',iexp,p%ntimes
 	allocate(p%t(p%ntimes))
 	allocate(p%y(p%ntimes,p%nvars))
 	allocate(p%ymax(p%nvars))
@@ -425,245 +429,37 @@ read(nf,*)	! weights
 it = 0
 iexp = 0
 expID = ' '
-skip = .false.
-do
-	read(nf,'(a)',end=199) line
-	if (len(trim(line)) == 0) cycle
-	call parse(line,', ',arg,nargs)
-	arg2 = arg(2)(1:6)
-!	if (expID /= arg(1)(1:6)) then
-	if (arg2 == yes) then
-		iexp = iexp + 1
-		expID = arg(1)(1:6)
-		it = 0
-		skip = .false.
-	endif
-	if (arg2 == no) then
-		skip = .true.
-	endif
-	if (skip) cycle
-	p => experiment(iexp)
-	it = it+1
-	if (it == 1) then	! this is needed 
-		col0 = 3
-	else
-		col0 = 2
-	endif
-	read(arg(col0),*) p%t(it)
-!	write(*,'(8(a,1x))') (trim(arg(k)),k=1,nargs)
-	do i = 1,p%nvars
-		if (arg(i+col0) == ' ') then
-			val = -1
-		else
-			read(arg(i+col0),*,end=199) val
-		endif
-		p%y(it,i) = val
-	enddo
-enddo
-199 continue
-close(nf)
-
-do iexp = 1,Nexpts
-	p => experiment(iexp)
-	do i = 1,p%nvars
-		p%ymax(i) = 0
-		do it = 1,p%ntimes
-			p%ymax(i) = max(p%ymax(i),p%y(it,i))
-		enddo
-		write(nfitlog,*) 'iexp,ivar,ymax: ',iexp,i,p%ymax(i)
-	enddo
-enddo
-
-end subroutine
-
-!----------------------------------------------------------------------------
-! 2nd try
-!----------------------------------------------------------------------------
-subroutine read_expt2(nf,filename)
-integer :: nf
-character*(48) :: filename
-character*(128) :: line
-character*(48) :: arg(16)
-character*(6) :: expID
-integer :: nargs, nvarsmax
-integer :: iexp, it, i, k
-real(REAL_KIND) :: val
-type(experiment_type), pointer :: p
-
-open(nf,file=filename,status='old')
-
-read(nf,'(a)',end=99) line
-call parse(line,', ',arg,nargs)
-read(arg(1),'(i)') Nexpts
-allocate(experiment(Nexpts))
-nvarsmax = 0
-do iexp = 1,Nexpts
-	p => experiment(iexp)
-	p%nvars = nargs - 2
-	allocate(p%varID(p%nvars))
-	p%ntimes = 0
-	do i = 1,p%nvars
-		p%varID(i) = arg(i+2)
-	enddo
-	nvarsmax = max(nvarsmax,p%nvars)
-enddo
-read(nf,*) weight(1:nvarsmax)
-iexp = 0
-expID = ' '
-do
-	read(nf,'(a)',end=99) line
-	if (len(trim(line)) == 0) cycle
-	call parse(line,', ',arg,nargs)
-	if (expID /= arg(1)(1:6)) then
-		iexp = iexp + 1
-		expID = arg(1)(1:6)
-		experiment(iexp)%ID = expID
-	endif
-	p => experiment(iexp)
-	p%ntimes = p%ntimes + 1
-enddo
-99 continue
-close(nf)
-
-do iexp = 1,Nexpts
-	p => experiment(iexp)
-	allocate(p%t(p%ntimes))
-	allocate(p%y(p%ntimes,p%nvars))
-	allocate(p%ymax(p%nvars))
-	allocate(p%is_dose(p%ntimes,p%nvars))
-	allocate(p%itsim(p%ntimes))
-	allocate(p%ysim(p%ntimes,p%nvars))
-	allocate(p%ysim_opt(p%ntimes,p%nvars))
-	p%is_dose = .false.
-enddo
-
-open(nf,file=filename,status='old')
-read(nf,*)	! varIDs
-read(nf,*)	! weights
-it = 0
-iexp = 0
-expID = ' '
-do
-	read(nf,'(a)',end=199) line
-	if (len(trim(line)) == 0) cycle
-	call parse(line,', ',arg,nargs)
-!	read(arg(1),'(i)') i
-!	if (i /= iexp) then
-!		it = 0
-!	endif
-!	iexp = i
-	if (expID /= arg(1)(1:6)) then
-		iexp = iexp + 1
-		expID = arg(1)(1:6)
-		it = 0
-	endif
-	p => experiment(iexp)
-	it = it+1
-	read(arg(2),*) p%t(it)
-!	write(*,'(8(a,1x))') (trim(arg(k)),k=1,nargs)
-	do i = 1,p%nvars
-		if (arg(i+2) == ' ') then
-			val = -1
-		else
-			read(arg(i+2),*,end=199) val
-		endif
-		p%y(it,i) = val
-	enddo
-enddo
-199 continue
-close(nf)
-
-do iexp = 1,Nexpts
-	p => experiment(iexp)
-	do i = 1,p%nvars
-		p%ymax(i) = 0
-		do it = 1,p%ntimes
-			p%ymax(i) = max(p%ymax(i),p%y(it,i))
-		enddo
-		write(nfitlog,*) 'iexp,ivar,ymax: ',iexp,i,p%ymax(i)
-	enddo
-enddo
-end subroutine
-
-!----------------------------------------------------------------------------
-! First try, with integers for experiment ID
-!----------------------------------------------------------------------------
-subroutine read_expt1(nf,filename)
-integer :: nf
-character*(48) :: filename
-character*(128) :: line
-character*(48) :: arg(16)
-integer :: nargs, nvarsmax
-integer :: iexp, it, i, k
-real(REAL_KIND) :: val
-type(experiment_type), pointer :: p
-
-open(nf,file=filename,status='old')
-
-read(nf,'(a)',end=99) line
-call parse(line,', ',arg,nargs)
-read(arg(1),'(i)') Nexpts
-allocate(experiment(Nexpts))
-nvarsmax = 0
-do iexp = 1,Nexpts
-	p => experiment(iexp)
-	p%nvars = nargs - 2
-	allocate(p%varID(p%nvars))
-	p%ntimes = 0
-	do i = 1,p%nvars
-		p%varID(i) = arg(i+2)
-	enddo
-	nvarsmax = max(nvarsmax,p%nvars)
-enddo
-read(nf,*) weight(1:nvarsmax)
-do
-	read(nf,'(a)',end=99) line
-	if (len(trim(line)) == 0) cycle
-	call parse(line,', ',arg,nargs)
-	read(arg(1),'(i)') iexp
-	p => experiment(iexp)
-	p%ntimes = p%ntimes + 1
-enddo
-99 continue
-close(nf)
-
-do iexp = 1,Nexpts
-	p => experiment(iexp)
-	allocate(p%t(p%ntimes))
-	allocate(p%y(p%ntimes,p%nvars))
-	allocate(p%ymax(p%nvars))
-	allocate(p%is_dose(p%ntimes,p%nvars))
-	allocate(p%itsim(p%ntimes))
-	allocate(p%ysim(p%ntimes,p%nvars))
-	allocate(p%ysim_opt(p%ntimes,p%nvars))
-	p%is_dose = .false.
-enddo
-
-open(nf,file=filename,status='old')
-read(nf,*)	! varIDs
-read(nf,*)	! weights
-it = 0
-iexp = 0
 do
 	read(nf,'(a)',end=199) line
 	if (len(trim(line)) == 0) cycle
 !	write(*,*) trim(line)
 	call parse(line,', ',arg,nargs)
 !	write(*,*) 'nargs: ',nargs
-	read(arg(1),'(i)') i
-	if (i /= iexp) then
+!	read(arg(1),'(i)') i
+!	if (i /= iexp) then
+!		it = 0
+!	endif
+!	iexp = i
+	if (trim(arg(1)) /= trim(expID)) then
+		iexp = iexp + 1
+		expID = arg(1)
+		p => experiment(iexp)
 		it = 0
 	endif
-	iexp = i
-	p => experiment(iexp)
 	it = it+1
-	read(arg(2),*) p%t(it)
+	if (it == 1) then
+		inc = 1
+	else
+		inc = 0
+	endif
+	read(arg(2+inc),*) p%t(it)
+
 !	write(*,'(8(a,1x))') (trim(arg(k)),k=1,nargs)
 	do i = 1,p%nvars
-		if (arg(i+2) == ' ') then
+		if (arg(i+2+inc) == ' ') then
 			val = -1
 		else
-			read(arg(i+2),*,end=199) val
+			read(arg(i+2+inc),*,end=199) val
 		endif
 		p%y(it,i) = val
 	enddo
@@ -681,12 +477,12 @@ do iexp = 1,Nexpts
 		write(nfitlog,*) 'iexp,ivar,ymax: ',iexp,i,p%ymax(i)
 	enddo
 enddo
+
 end subroutine
 
 !----------------------------------------------------------------------------
 ! The crucial step will be to evaluate the experimental data variables at
 ! the specified time points.
-! Note that in get_values(), drug concentrations are converted from mM to uM.
 !----------------------------------------------------------------------------
 subroutine run(iexp)
 integer :: iexp
@@ -715,19 +511,26 @@ do i = 1,pexp%ntimes
 	it = (60*60*pexp%t(i))/DELTA_T + 0.5
 	pexp%itsim(i) = it		!max(it,1)
 enddo
+write(*,*) 'p%itsim: ',pexp%itsim(1:pexp%ntimes)
 ! Run the simulation
 t1 = wtime()
 nsumm_interval = (60*60)/DELTA_T   ! number of time steps per hour
 !write(*,*) 'nsumm_interval: ',nsumm_interval
-do jstep = 0,Nsteps-1
+do jstep = 0,Nsteps
 	do i = 1,pexp%ntimes
 		if (pexp%itsim(i) == jstep) then
 			call get_values(pexp%nvars,pexp%varID(:),pexp%ysim(i,:))
-			
-!			write(nfitlog,'(a,2i4,f8.2)') 'time: ',i,jstep,pexp%itsim(i)*DELTA_T/(60*60)
-!			do k = 1,pexp%nvars
-!				write(nfitlog,'(i3,a32,e12.3)') k,pexp%varID(k),pexp%ysim(i,k)
-!			enddo
+			if (i == 1) then
+				do k = 1,pexp%nvars
+					if (input_varID(k)) then
+						pexp%ysim(i,k) = pexp%y(i,k)
+					endif
+				enddo
+			endif
+			write(nfitlog,'(a,2i4,f8.2)') 'time: ',i,jstep,pexp%itsim(i)*DELTA_T/(60*60)
+			do k = 1,pexp%nvars
+				write(nfitlog,'(i3,a32,e12.3)') k,pexp%varID(k),pexp%ysim(i,k)
+			enddo
 		endif
 	enddo
 	call simulate_step(res)
@@ -756,7 +559,7 @@ end subroutine
 subroutine quantify(iexp,dfobj)
 integer :: iexp
 real(REAL_KIND) :: dfobj
-real(REAL_KIND) :: fscale, dv, dv2, vsim, vexp, vmax
+real(REAL_KIND) :: fscale, dv, dv2, y, ysim
 integer :: it, ivar
 type(experiment_type), pointer :: pexp
 logical :: use_abs = .true.
@@ -768,27 +571,59 @@ write(nfitlog,*) 'quantify: iexp: ',iexp
 dfobj = 0
 do it = 1,pexp%ntimes
 	do ivar = 1,pexp%nvars
-		if (pexp%is_dose(it,ivar)) then
-			pexp%ysim(it,ivar) = pexp%y(it,ivar)
-			cycle
-		endif
 		if (weight(ivar) == 0) cycle
-		vsim = pexp%ysim(it,ivar)
-		vexp = pexp%y(it,ivar)
-		if (vexp == 0 .or. vsim == 0) cycle	! missing value
-		vmax = pexp%ymax(ivar)
-		if (trim(pexp%varID(ivar)) == 'PE' .and. use_logPE) then
-			if (vsim /= 1) then
-				vsim = log10(vsim)
+		if (pexp%y(it,ivar) == -1 .or. pexp%ysim(it,ivar) == -1) cycle	! missing value
+		if (pexp%is_dose(it,ivar)) cycle
+		if (trim(pexp%varID(ivar)) == 'NCELLS' .and. use_log) then
+			y = log(pexp%y(it,ivar))
+			ysim = log(pexp%ysim(it,ivar))
+			fscale = ysim/log(pexp%ymax(ivar))
+		else
+			y = pexp%y(it,ivar)
+			ysim = pexp%ysim(it,ivar)
+			fscale = ysim/pexp%ymax(ivar)
+		endif
+		dv = y - ysim
+		write(nfitlog,'(2i4,4e12.3)') it,ivar,y,ysim,dv,abs(dv/y)
+		if (use_ysim) then		
+			if (ysim == 0) then
+				if (y /= 0) then
+					if (use_abs) then
+						dv2 = abs(dv/y)
+					else
+						dv2 = (dv/y)**2
+					endif
+				else
+					dv2 = 0
+				endif
+			else
+				if (use_abs) then
+					dv2 = abs(dv/ysim)
+				else
+					dv2 = (dv/ysim)**2
+				endif
 			endif
-			if (vexp /= 1) then
-				vexp = log10(vexp)
-			endif
-			if (vmax /= 1) then
-				vmax = log10(vmax)
+		else
+			if (y == 0) then
+				if (ysim /= 0) then
+					if (use_abs) then
+						dv2 = abs(dv/ysim)
+					else
+!						dv2 = dv*dv/pexp%ysim(it,ivar)
+						dv2 = (dv/ysim)**2
+					endif
+				else
+					dv2 = 0
+				endif
+			else
+				if (use_abs) then
+					dv2 = abs(dv/y)
+				else
+!					dv2 = dv*dv/pexp%y(it,ivar)
+					dv2 = (dv/y)**2
+				endif
 			endif
 		endif
-!		fscale = pexp%ysim(it,ivar)/pexp%ymax(ivar)
 !		dv = pexp%y(it,ivar) - pexp%ysim(it,ivar)
 !		write(nfitlog,'(2i4,4e12.3)') it,ivar,pexp%y(it,ivar),pexp%ysim(it,ivar),dv,abs(dv/pexp%y(it,ivar))
 !		if (use_ysim) then		
@@ -831,50 +666,13 @@ do it = 1,pexp%ntimes
 !			endif
 !		endif
 		
-		dv = vexp - vsim
-		write(nfitlog,'(2i4,5e12.3)') it,ivar,vexp,vsim,dv,abs(dv/vexp),vmax
-		fscale = abs(vsim/vmax)
-		if (use_ysim) then		
-			if (vsim == 0) then
-				if (vexp /= 0) then
-					if (use_abs) then
-						dv2 = abs(dv/vexp)
-					else
-						dv2 = (vexp)**2
-					endif
-				else
-					dv2 = 0
-				endif
-			else
-				if (use_abs) then
-					dv2 = abs(dv/vsim)
-				else
-					dv2 = (dv/vsim)**2
-				endif
-			endif
-		else
-			if (vexp == 0) then
-				if (vsim /= 0) then
-					if (use_abs) then
-						dv2 = abs(dv/vsim)
-					else
-!						dv2 = dv*dv/pexp%ysim(it,ivar)
-						dv2 = (dv/vsim)**2
-					endif
-				else
-					dv2 = 0
-				endif
-			else
-				if (use_abs) then
-					dv2 = abs(dv/vexp)
-				else
-!					dv2 = dv*dv/pexp%y(it,ivar)
-					dv2 = (dv/vexp)**2
-				endif
-			endif
-		endif
+!		if (isnan(dv2)) then
+!			write(*,'(2i4,3e12.3)') it,ivar,pexp%y(it,ivar),pexp%ysim(it,ivar),dv2
+!			write(*,*) 'Bad dv2'
+!			write(nfitlog,*) 'Bad dv2'
+!			stop
+!		endif
 		dfobj = dfobj + fscale*weight(ivar)*dv2
-
 	enddo
 enddo
 end subroutine
@@ -988,10 +786,9 @@ do iter = 1,Niters
 		write(nfitlog,*) isim,param(0:Nparams-1)%ival
 		fobj = 0
 		do iexp = 1,Nexpts
-			write(nfitlog,*) '        iexp: ',iexp
+			write(nfitlog,*) '        iter,isim,iexp: ',iter,isim,iexp
 			! Need to set the parameter values appropriately in the infile
-			! including protocol initial values if they vary with iexp
-			! and including any other ### initial values
+			! including initial values (including protocol) if they vary with iexp
 			call create_input(iexp,nfin,template_infile, infile)
 			call run(iexp)
 			! Evaluate the objective function dfobj
@@ -1004,7 +801,7 @@ do iter = 1,Niters
 			fobj = fobj + dfobj
 			pexp => experiment(iexp)
 			do k = 1,pexp%ntimes
-				write(nfitlog,'(a,f8.3,10e14.6)') pexp%ID,pexp%t(k),(pexp%ysim(k,i),i=1,pexp%nvars)
+				write(nfitlog,'(i2,f8.3,10e14.6)') iexp,pexp%t(k),(pexp%ysim(k,i),i=1,pexp%nvars)
 			enddo
 		enddo
 		write(nfitlog,*) 'fobj: ',fobj
@@ -1035,14 +832,11 @@ do iter = 1,Niters
 		write(nfitlog,*) 'Final optimum parameter values:'
 	endif
 	do k = 0,Nparams-1
-		write(nfitlog,'(i2,2x,a48,e12.3)') k,param(k)%ID,param(k)%val(ivalmin(k))
+		write(nfitlog,'(a48,e12.3)') param(k)%ID,param(k)%val(ivalmin(k))
 	enddo
 	
 	pexp => experiment(1)
 	allocate(head(2*pexp%nvars + 3))
-!	head(1) = 'experiment'
-!	head(2) = 'point'
-!	head(3) = 'hour'
 	do i = 1,pexp%nvars
 		head(2*i-1) = trim(pexp%varID(i))//'-exp'
 		head(2*i) = trim(pexp%varID(i))//'-sim'
@@ -1052,7 +846,7 @@ do iter = 1,Niters
 	do iexp = 1,Nexpts
 		pexp => experiment(iexp)
 		do k = 1,pexp%ntimes
-			write(nfitlog,'(a,i4,f6.2,10e12.3)') pexp%ID,k,pexp%t(k),(pexp%y(k,i),pexp%ysim_opt(k,i),i=1,pexp%nvars)
+			write(nfitlog,'(a,2x,i4,f6.2,10e12.3)') trim(pexp%expID),k,pexp%t(k),(pexp%y(k,i),pexp%ysim_opt(k,i),i=1,pexp%nvars)
 		enddo
 	enddo
 	deallocate(head)
@@ -1061,6 +855,6 @@ do iter = 1,Niters
 		param(k)%minval = param(k)%val(max(0,ivalmin(k)-1))
 		param(k)%maxval = param(k)%val(min(param(k)%nvals-1,ivalmin(k)+1))
 	enddo
-enddo   
+enddo
 end program
 

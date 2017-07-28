@@ -1207,7 +1207,7 @@ enddo
 end subroutine
 
 !-----------------------------------------------------------------------------------------
-! If a variable value is missing 
+! If a variable value is missing  
 !-----------------------------------------------------------------------------------------
 subroutine get_values(nvars,varID,ysim)
 !DEC$ ATTRIBUTES DLLEXPORT :: get_values
@@ -1219,6 +1219,7 @@ integer :: Nviable(MAX_CELLTYPES), Nlive(MAX_CELLTYPES)
 real(REAL_KIND) :: plate_eff(MAX_CELLTYPES)
 
 do ivar = 1,nvars
+	write(*,*) 'get_values: ivar: ',ivar,varID(ivar)
 	if (varID(ivar) == 'OXYGEN_EC') then
 		ysim(ivar) = Cmediumave(OXYGEN)
 	elseif (varID(ivar) == 'GLUCOSE_EC') then
@@ -1268,10 +1269,11 @@ do ivar = 1,nvars
 		enddo
 		ysim(ivar) = plate_eff(1)	! for now, just type 1 cells
 	elseif (varID(ivar) == 'RADIATION') then
-		ysim(ivar) = -1
+		ysim(ivar) = 0
 	else
-		write(*,*) 'varID is not in the list of possible IDs: ',varID(ivar)
-		stop
+!		write(*,*) 'varID is not in the list of possible IDs: ',varID(ivar)
+!		stop
+		ysim(ivar) = 0
 	endif
 enddo
 end subroutine
