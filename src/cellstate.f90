@@ -220,14 +220,15 @@ end subroutine
 subroutine CellDeath(dt,ok)
 real(REAL_KIND) :: dt
 logical :: ok
-integer :: kcell, nlist0, site(3), i, ichemo, idrug, im, ityp, killmodel, kpar=0 
-real(REAL_KIND) :: C_O2, C_glucose, Cdrug, n_O2, kmet, Kd, dMdt, kill_prob, dkill_prob, death_prob, survival_prob, R
+integer :: kcell, nlist0, site(3), i, ichemo, idrug, im, ityp, kill_model, kpar=0 
+real(REAL_KIND) :: C_O2, C_glucose, Cdrug, n_O2, kmet, Kd, dMdt, kill_prob, dkill_prob, death_prob, survival_prob, R, c, ctot
 logical :: anoxia_death, aglucosia_death
 type(drug_type), pointer :: dp
 type(cell_type), pointer :: cp
+logical :: new_kill_method = .true.
 logical :: flag = .true.
 
-!call logger('CellDeath')
+!call logger('CellDeath') 
 ok = .true.
 if (colony_simulation) then
     return
@@ -302,25 +303,44 @@ do kcell = 1,nlist
 		kill_prob = 0
 		death_prob = 0
 		survival_prob = 1
+		ctot = 0
 		do im = 0,2
 			if (.not.dp%kills(ityp,im)) cycle
 			if (flag) write(nflog,*) 'kcell,im: ',kcell,im
-			killmodel = dp%kill_model(ityp,im)		! could use %drugclass to separate kill modes
+			kill_model = dp%kill_model(ityp,im)		! could use %drugclass to separate kill modes
 			Cdrug = cp%Cin(ichemo + im)
 			Kd = dp%Kd(ityp,im)
 			n_O2 = dp%n_O2(ityp,im)
 			kmet = (1 - dp%C2(ityp,im) + dp%C2(ityp,im)*dp%KO2(ityp,im)**n_O2/(dp%KO2(ityp,im)**n_O2 + C_O2**n_O2))*dp%Kmet0(ityp,im)
 			if (flag) write(nflog,'(a,6e12.3)') 'kmet: ',dp%C2(ityp,im),dp%KO2(ityp,im),n_O2,C_O2,dp%Kmet0(ityp,im),kmet
 			dMdt = kmet*Cdrug
-			call getDrugKillProb(killmodel,Kd,dMdt,Cdrug,dt,dkill_prob)
-			if (flag) then
-				write(nflog,'(a,5e12.3)') 'Cdrug,Kd,kmet,dMdt,dt: ',Cdrug,Kd,kmet,dMdt,dt
-				write(nflog,'(a,e12.3)') 'dkill_prob: ',dkill_prob
+			if (new_kill_method) then	! Actually this is exactly the same as the original method.
+				if (kill_model == 1) then
+					c = Kd*dMdt
+				elseif (kill_model == 2) then
+					c = Kd*dMdt*Cdrug
+				elseif (kill_model == 3) then
+					c = Kd*dMdt**2
+				elseif (kill_model == 4) then
+					c = Kd*Cdrug
+				elseif (kill_model == 5) then
+					c = Kd*Cdrug**2
+				endif
+				ctot = ctot + c
+			else
+				call getDrugKillProb(kill_model,Kd,dMdt,Cdrug,dt,dkill_prob)
+				if (flag) then
+					write(nflog,'(a,5e12.3)') 'Cdrug,Kd,kmet,dMdt,dt: ',Cdrug,Kd,kmet,dMdt,dt
+					write(nflog,'(a,e12.3)') 'dkill_prob: ',dkill_prob
+				endif
+	!			kill_prob = kill_prob + dkill_prob
+				survival_prob = survival_prob*(1 - dkill_prob)
 			endif
-!			kill_prob = kill_prob + dkill_prob
-			survival_prob = survival_prob*(1 - dkill_prob)
 			death_prob = max(death_prob,dp%death_prob(ityp,im))
 		enddo
+		if (new_kill_method) then
+			survival_prob = exp(-ctot*dt)
+		endif
 		kill_prob = 1 - survival_prob
 		R = par_uni(kpar)
 		if (flag) write(nflog,*) 'kill_prob: ',kcell,kill_prob,R
