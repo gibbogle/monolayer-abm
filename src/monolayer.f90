@@ -419,6 +419,7 @@ read(nfcell,*) aglucosia_threshold			! O2 threshold for aglucosia (uM)
 read(nfcell,*) aglucosia_tag_hours			! hypoxic time leading to tagging to die by aglucosia (h)
 read(nfcell,*) aglucosia_death_hours		! time after tagging to death by aglucosia (h)
 read(nfcell,*) itestcase                    ! test case to simulate
+read(nfcell,*) C_O2_bolus					! for special_case(1), medium O2 conc on drug dose
 read(nfcell,*) seed(1)						! seed vector(1) for the RNGs
 read(nfcell,*) seed(2)						! seed vector(2) for the RNGs
 read(nfcell,*) ncpu_input					! for GUI just a placeholder for ncpu, used only when execute parameter ncpu = 0
@@ -816,6 +817,7 @@ do idrug = 1,Ndrugs_used
     enddo
     write(nflog,*) 'drug: ',idrug,drug(idrug)%classname,'  ',drug(idrug)%name
 enddo
+drug_dose_flag = .false.
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -1342,6 +1344,7 @@ type(event_type) :: E
 !write(logmsg,*) 'ProcessEvent'
 !call logger(logmsg) 
 radiation_dose = 0
+drug_O2_bolus = .false.
 do kevent = 1,Nevents
 	E = event(kevent)
 	if (t_simulation >= E%time .and. .not.E%done) then
@@ -1351,6 +1354,7 @@ do kevent = 1,Nevents
 			write(logmsg,'(a,f8.0,f8.3)') 'RADIATION_EVENT: time, dose: ',t_simulation,E%dose
 			call logger(logmsg)
 		elseif (E%etype == MEDIUM_EVENT) then
+			drug_dose_flag = .false.
 			write(logmsg,'(a,f8.0,f8.3,2f8.4)') 'MEDIUM_EVENT: time, volume, O2medium: ',t_simulation,E%volume,E%O2medium
 			call logger(logmsg)
 			C = 0
@@ -1359,8 +1363,12 @@ do kevent = 1,Nevents
 			V = E%volume
 			call MediumChange(V,C)
 		elseif (E%etype == DRUG_EVENT) then
+			drug_dose_flag = .true.
 			C = 0
 			C(OXYGEN) = E%O2conc
+			if (test_case(1) .or. test_case(2)) then
+				drug_O2_bolus = .true.
+			endif
 			C(GLUCOSE) = chemo(GLUCOSE)%bdry_conc
 			ichemo = E%ichemo
 			idrug = E%idrug
@@ -1470,10 +1478,19 @@ end subroutine
 subroutine MediumChange(Ve,Ce)
 real(REAL_KIND) :: Ve, Ce(:)
 real(REAL_KIND) :: R, Vm, Vr, Vcells, mass(MAX_CHEMO)
+real(REAL_KIND) :: O2_bdry
 integer :: ichemo, idrug, im, iparent
 
 write(nflog,*)
 write(nflog,*) 'MediumChange:'
+O2_bdry = Ce(OXYGEN)
+if (drug_O2_bolus) then
+	use_SS_oxygen = .false.
+	Ce(OXYGEN) = C_O2_bolus
+	if (O2_bdry == 0) then
+		O2_bdry = anoxia_threshold/2
+	endif
+endif
 write(nflog,'(a,f8.4)') 'Ve: ',Ve
 write(nflog,'(a,13f8.4)') 'Ce: ',Ce
 Vcells = Ncells*Vcell_cm3
@@ -1484,9 +1501,11 @@ mass = (Vm - Vr)*Caverage(MAX_CHEMO+1:2*MAX_CHEMO) + Ve*Ce(:)
 write(nflog,'(a,13f8.4)') 'mass: ',mass
 total_volume = Vm - Vr + Ve + Vcells
 Caverage(MAX_CHEMO+1:2*MAX_CHEMO) = mass/(total_volume - Vcells)
+Caverage(OXYGEN) = Ce(OXYGEN)
+chemo(OXYGEN)%Cmedium = Ce(OXYGEN)
 write(nflog,'(a,13f8.4)') 'Caverage: ',Caverage(MAX_CHEMO+1:2*MAX_CHEMO)
 
-chemo(OXYGEN)%bdry_conc = Ce(OXYGEN)
+!chemo(OXYGEN)%bdry_conc = Ce(OXYGEN)
 chemo(GLUCOSE)%Cmedium = Caverage(MAX_CHEMO+GLUCOSE)
 do idrug = 1,2
 	iparent = DRUG_A + 3*(idrug-1)
@@ -1497,7 +1516,10 @@ do idrug = 1,2
 		write(nflog,'(a,4i3,e12.3)') 'idrug,iparent,im,ichemo,Cmedium: ',idrug,iparent,im,ichemo,chemo(ichemo)%Cmedium(1)
 	enddo
 enddo
-call SetOxygenLevels	! also sets drug levels in cells 
+chemo(OXYGEN)%bdry_conc = O2_bdry	!Ce(OXYGEN)
+if (use_SS_oxygen) then
+	call SetOxygenLevels	! also sets drug levels in cells
+endif
 t_lastmediumchange = istep*DELTA_T
 medium_change_step = .true.
 write(nflog,*)
@@ -1665,10 +1687,9 @@ do idiv = 0,ndiv-1
 			res = 5
 			return
 		endif
-		! Set O2 levels
-		call SetOxygenLevels
-!		Cancelled, now using GlucoseSolver
-!		if (.not.fully_mixed) call SolveMediumGlucose(dt)
+		if (use_SS_oxygen) then
+			call SetOxygenLevels
+		endif
 	enddo
 	!write(nflog,*) 'did Solver'
 	call CheckDrugConcs

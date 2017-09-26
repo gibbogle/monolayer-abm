@@ -384,6 +384,73 @@ k = 0
 end subroutine
 
 !----------------------------------------------------------------------------------
+! This is based on f_rkc_glucose.
+! The difference is that now the upper boundary is not a wall, it is constant conc.
+!----------------------------------------------------------------------------------
+subroutine f_rkc_oxygen(neqn,t,y,dydt,icase)
+integer :: neqn, icase
+real(REAL_KIND) :: t, y(neqn), dydt(neqn)
+integer :: k, kk, i, ichemo, ict, Ng
+real(REAL_KIND) :: dCsum, dCdiff, dCreact, vol_cm3, Cex
+real(REAL_KIND) :: decay_rate, C, membrane_kin, membrane_kout, membrane_flux, area_factor
+real(REAL_KIND) :: metab, cell_flux, dMdt, vcell_actual, dC, A, d, dX, dV, Kd, KdAVX, Cbnd
+real(REAL_KIND) :: average_volume = 1.2
+logical :: use_average_volume = .true.
+
+ict = icase
+A = well_area
+d = total_volume/A
+dX = d/N1D
+dV = A*dX
+if (use_average_volume) then
+    vol_cm3 = Vcell_cm3*average_volume	  ! not accounting for cell volume change
+    area_factor = (average_volume)**(2./3.)
+endif
+
+ichemo = OXYGEN
+Ng = chemo(ichemo)%Hill_N
+Cbnd = chemo(ichemo)%bdry_conc
+k = 0
+	! First process IC reaction
+	k = k+1
+	C = y(k)
+	Cex = y(k+1)
+!	ichemo = iparent + im
+	Kd = chemo(ichemo)%medium_diff_coef
+!    decay_rate = chemo(ichemo)%decay_rate
+	decay_rate = 0
+    membrane_kin = chemo(ichemo)%membrane_diff_in
+    membrane_kout = chemo(ichemo)%membrane_diff_out
+	membrane_flux = area_factor*(membrane_kin*Cex - membrane_kout*C)
+    metab = C**Ng/(chemo(ichemo)%MM_C0**Ng + C**Ng)
+    cell_flux = metab*chemo(ichemo)%max_cell_rate
+    dCreact = (-cell_flux + membrane_flux)/vol_cm3	! convert mass rate (mumol/s) to concentration rate (mM/s)
+	dydt(k) = dCreact - C*decay_rate
+!	write(nflog,'(a,i4,e12.3)') 'dydt: ',im,dydt(k)
+	if (isnan(dydt(k))) then
+		write(nflog,*) 'f_rkc_oxygen: dydt isnan: ',dydt(k)
+		stop
+	endif
+	
+	! Next process grid cell next to the cell layer - note that membrane _flux has already been computed
+	k = k+1
+	C = y(k)
+	dydt(k) = (-Ncells*membrane_flux - Kd*A*(C - y(k+1))/dX)/dV - C*decay_rate
+	
+	! Next compute diffusion and decay on the FD grid
+	KdAVX = Kd*A/(dV*dX)
+	do i = 2,N1D
+		k = k+1
+		C = y(k)
+		if (i < N1D) then
+			dydt(k) = KdAVX*(y(k+1) - 2*C + y(k-1)) - C*decay_rate
+		else
+			dydt(k) = KdAVX*(Cbnd -2*C + y(k-1)) - C*decay_rate
+		endif
+	enddo
+end subroutine
+
+!----------------------------------------------------------------------------------
 !----------------------------------------------------------------------------------
 subroutine Solver1(it,tstart,dt,nc,ok)
 integer :: it, nc
@@ -590,7 +657,9 @@ ok = .true.
 !    if (.not.chemo_active(k)) cycle
 !    Caverage(MAX_CHEMO + ichemo) = C(k)
 !enddo
-
+if (.not.use_SS_oxygen) then
+	call OxygenSolver_noSS(tstart,dt,ok)
+endif
 call GlucoseSolver(tstart,dt,ok)
 
 if (.not.use_drugsolver) return
@@ -775,6 +844,88 @@ enddo
 write(nflog,'(a,3e12.3)') 'IC drug conc: ',(Caverage(DRUG_A+k),k=0,2)
 write(nflog,'(a,3e12.3)') 'EC drug conc: ',(Caverage(MAX_CHEMO + DRUG_A+k),k=0,2)
 write(nflog,'(a,2i4,3e12.3)') 'Cin: ',iparent,DRUG_A,cell_list(1)%Cin(iparent:iparent+2)
+
+end subroutine
+
+!----------------------------------------------------------------------------------
+! To solve for oxygen without the steady-state assumption.
+!----------------------------------------------------------------------------------
+subroutine OxygenSolver_noSS(tstart,dt,ok)
+real(REAL_KIND) :: tstart, dt
+logical :: ok
+integer :: ichemo, k, ict, neqn, i, kcell, im
+real(REAL_KIND) :: t, tend
+real(REAL_KIND) :: C(3*N1D+3), Csum, decay_rate
+real(REAL_KIND) :: timer1, timer2
+! Variables for RKC
+integer :: info(4), idid
+real(REAL_KIND) :: rtol, atol(1)
+type(rkc_comm) :: comm_rkc(1)
+
+!write(nflog,*) 'OxygenSolver_noSS: ',istep
+ict = selected_celltype
+
+k = 0
+ichemo = OXYGEN
+k = k+1
+C(k) = Caverage(ichemo)		! IC 
+do i = 1,N1D
+	k = k+1
+	C(k) = chemo(ichemo)%Cmedium(i)
+enddo
+
+neqn = k
+
+info(1) = 1
+info(2) = 1		! = 1 => use spcrad() to estimate spectral radius, != 1 => let rkc do it
+info(3) = 1
+info(4) = 0
+rtol = 1d-5
+atol = rtol
+
+idid = 0
+t = tstart
+tend = t + dt
+call rkc(comm_rkc(1),neqn,f_rkc_oxygen,C,t,tend,rtol,atol,info,work_rkc,idid,ict)
+if (idid /= 1) then
+	write(logmsg,*) 'OxygenSolver_noSS: Failed at t = ',t,' with idid = ',idid
+	call logger(logmsg)
+	ok = .false.
+	return
+endif
+!write(nflog,'(a,3e12.3)') 'IC: ',C(1),C(N1D+2),C(2*N1D+3)
+!write(nflog,*) 'after rkc:'
+!write(nflog,'(63e12.5)') C(:)
+
+! This determines average cell concentrations, assumed the same for all cells
+! Now put the concentrations into the cells 
+
+k = 1
+Caverage(ichemo) = C(k)
+if (C(k) < 0) then
+	write(logmsg,'(a,i4,e12.3)') 'Error: OxygenSolver_noSS: IC < 0: im,IC: ',im,Caverage(ichemo)
+	call logger(logmsg)
+	ok = .false.
+	return
+endif
+Csum = 0
+do i = 1,N1D
+	chemo(ichemo)%Cmedium(i) = C(k+i)
+	Csum = Csum + C(k+i)
+	C(k+i) = max(0.0d0,C(k+i))
+	if (C(k+i) < 0) then
+		write(logmsg,'(a,2i4,2e12.3)') 'Error: OxygenSolver_noSS: C < 0: im,k,IC,C(k+i): ',im,k,Caverage(ichemo),C(k+i)
+		call logger(logmsg)
+		ok = .false.
+		return
+	endif
+enddo
+Cmediumave(ichemo) = Csum/N1D
+do kcell = 1,nlist
+    if (cell_list(kcell)%state == DEAD) cycle
+    cell_list(kcell)%Cin(ichemo) = Caverage(ichemo)
+enddo
+Caverage(MAX_CHEMO + ichemo) = C(k+1)	! not really average, this is medium at the cell layer 
 
 end subroutine
 

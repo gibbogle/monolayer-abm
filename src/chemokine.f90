@@ -139,6 +139,11 @@ do ichemo = 1,MAX_CHEMO
 		endif
 	endif
 enddo
+do ichemo = 1,2
+	Caverage(ichemo) = chemo(ichemo)%bdry_conc
+	Caverage(MAX_CHEMO + ichemo) = chemo(ichemo)%bdry_conc
+	chemo(ichemo)%Cmedium = chemo(ichemo)%bdry_conc
+enddo
 !call AllocateConcArrays
 !if (use_FD) then
 !	do ichemo = 1,MAX_CHEMO

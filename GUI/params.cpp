@@ -161,7 +161,13 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
 
 {"TEST_CASE", 0, 0, 0,
 "Test case #",
-"Number of the test case to run.  The default value of 0 is for a normal run"},
+"Number of the test case to run.  The default value of 0 is for a normal run.\n\
+ Case 1 uses O2 bolus as initial medium concentration in a drug dose event, with protocol O2 level at the upper boundary\n\
+ Case 2 uses O2 bolus as initial medium concentration in a drug dose event, with a wall at the upper boundary"},
+
+{"C_O2_BOLUS", 0.0, 0, 0,
+"O2 bolus conc",
+"Initial O2 conc in medium after drug dose, for test case #1."},
 
 {"SEED1", 1234, 0, 0,
 "First RNG seed",
