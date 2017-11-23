@@ -794,6 +794,8 @@ info(4) = 0
 rtol = 1d-5
 atol = rtol
 
+CO2_rkc = Caverage(OXYGEN)
+
 idid = 0
 t = tstart
 tend = t + dt
