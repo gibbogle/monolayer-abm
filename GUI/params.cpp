@@ -261,7 +261,7 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
  "Spheroid diffusion coeff",
  "GLUCOSE diffusion coefficient"},
 
-{"GLUCOSE_MEDIUM_DIFF", 6.0e-6, 0, 0,
+{"GLUCOSE_MEDIUM_DIFF", 8.0e-6, 0, 0,
  "Medium diffusion coeff",
  "Constituent diffusion coefficient in the medium"},
 
@@ -277,7 +277,7 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
  "Constant concentration",
  "Extracellular concentration to be held constant everywhere at the specified boundary value"},
 
-{"GLUCOSE_CONSUMPTION", 3.8e-17, 0, 0,
+{"GLUCOSE_CONSUMPTION", 7.1e-17, 0, 0,
  "Max consumption rate",
  "GLUCOSE consumption rate"},
 
