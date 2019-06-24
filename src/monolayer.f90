@@ -691,7 +691,7 @@ write(logmsg,*) 'Opened nfout: ',outputfile
 call logger(logmsg)
 
 Nsteps = days*24*60*60/DELTA_T		! DELTA_T in seconds
-NT_DISPLAY = 2
+NT_DISPLAY = 1
 DT_DISPLAY = NT_DISPLAY*DELTA_T
 write(logmsg,'(a,2i6,f6.0)') 'nsteps, NT_CONC, DELTA_T: ',nsteps,NT_CONC,DELTA_T
 call logger(logmsg)
