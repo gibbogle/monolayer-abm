@@ -198,6 +198,7 @@ real(REAL_KIND) :: IC_oxygen, IC_glucose, IC_lactate, IC_pyruvate, IC_drug(2,0:M
 real(REAL_KIND) :: EC(MAX_CHEMO), cmedium(MAX_CHEMO)
 character*(36) :: formatstr
 
+!write(nflog,*) 'get_summary'
 hour = istep*DELTA_T/3600.
 
 Ntagged_anoxia(:) = Nanoxia_tag(:)			! number currently tagged by anoxia
@@ -348,6 +349,7 @@ write(nfres,formatstr) trim(header),' ',gui_run_version, dll_run_version, &
 ndoublings = 0
 doubling_time_sum = 0
 ndivided = 0
+!write(nflog,*) 'did get_summary'
 
 end subroutine
 

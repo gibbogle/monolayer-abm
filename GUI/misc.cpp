@@ -180,6 +180,12 @@ void ExecThread::run()
     LOG_MSG("call execute");
     execute(&ncpu,const_cast<char *>(infile),&len_infile,const_cast<char *>(outfile),&len_outfile,&res);
     LOG_MSG("did execute");
+
+//    sleep(1000);
+//    res = -1;
+//    terminate_run(&res);
+//    sleep(5000);
+
     if (res) {
         terminate_run(&res);
         return;
@@ -209,10 +215,13 @@ void ExecThread::run()
 //    LOG_MSG("did tester");
 //    emit run_tester();
 
-    get_summary(Global::summaryData, &Global::i_hypoxia_cutoff, &Global::i_growth_cutoff);
+//    sleep(100);
+//    get_summary(Global::summaryData, &Global::i_hypoxia_cutoff, &Global::i_growth_cutoff);        // This was causing crashes
 //    getProfiles();
-    emit summary(hour);		// Emit signal to initialise summary plots
+//    emit summary(hour);		// Emit signal to initialise summary plots
+//    sleep(100);
 
+    res = 0;
     for (int i=1; i <= nsteps+1; i++) {
         sleep(10);
         bool updated = false;

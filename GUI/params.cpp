@@ -86,7 +86,7 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
 "Randomise initial cell volumes",
 "The volumes of the initial cell population are randomised."},
 
-{"NDAYS", 10.0, 0.0, 30.0,
+{"NDAYS", 1.0, 0.0, 30.0,
 "Number of days",
 "Length of the simulation.\n\
 [days]"},

@@ -1650,7 +1650,6 @@ if (dbug .or. mod(istep,nthour) == 0) then
 !	call showcells
 endif
 ! write(nflog,'(a,f8.3)') 'did simulate_step: time: ',wtime()-start_wtime
-
 istep = istep + 1
 
 end subroutine
@@ -1759,6 +1758,7 @@ DELTA_T = 600
 nsteps = 100
 res=0
 
+ok = .true.
 call Setup(ncpu,infile,outfile,ok)
 if (ok) then
 !	clear_to_send = .true.
@@ -1869,10 +1869,12 @@ integer :: error, i
 call logger('terminate_run')
 call Wrapup
 
+stopped = .false.
 if (res == 0) then
 	call logger(' Execution successful!')
 elseif (res == -1) then
 	call logger(' Execution stopped')
+	stopped = .true.
 elseif (res == 2) then
 	call logger(' No more live cells')
 elseif (res == 6) then
@@ -1892,7 +1894,9 @@ close(nflog)
 if (use_TCP) then
 	if (stopped) then
 	    call winsock_close(awp_0)
-	    if (use_CPORT1) call winsock_close(awp_1)
+	    if (use_CPORT1) then
+			call winsock_close(awp_1)
+		endif
 	else
 	    call winsock_send(awp_0,quit,8,error)
 	    call winsock_close(awp_0)
@@ -1913,6 +1917,8 @@ logical :: isopen
 call logger('doing wrapup ...')
 ierr = 0
 if (allocated(gaplist)) deallocate(gaplist,stat=ierr)
+if (allocated(cell_list)) deallocate(cell_list)		! is this a good idea?
+if (allocated(drug)) deallocate(drug)
 call logger('deallocated all arrays')
 
 ! Close all open files

@@ -292,9 +292,9 @@ do kcell = 1,nlist
 		endif
 	endif
 	
-	flag = (kcell == 1)
+	flag = (kcell == -100)
 	do idrug = 1,ndrugs_used
-	nmet = drug(idrug)%nmetabolites
+		nmet = drug(idrug)%nmetabolites
 		ichemo = DRUG_A + (MAX_METAB+1)*(idrug-1)
 !		if (.not.flag) write(nflog,'(a,i3,2x,L)') 'idrug present?: ',idrug,chemo(ichemo)%present
 		if (.not.chemo(ichemo)%present) cycle
@@ -306,7 +306,6 @@ do kcell = 1,nlist
 		ctot = 0
 		do im = 0,nmet
 			if (.not.dp%kills(ityp,im)) cycle
-			if (flag) write(nflog,*) 'kcell,im: ',kcell,im
 			kill_model = dp%kill_model(ityp,im)		! could use %drugclass to separate kill modes
 			Cdrug = cp%Cin(ichemo + im)
 			Kd = dp%Kd(ityp,im)

@@ -353,6 +353,8 @@ void MainWindow::changeDrugParam(QObject *w)
         else
             val = 0;
         drug[idrug].param[kset].kill[ictyp].iparam[ii] = val;
+        sprintf(msg,"checkbox value: %d",val);
+        LOG_MSG(msg);
     }
 }
 

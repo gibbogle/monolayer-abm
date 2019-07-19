@@ -349,7 +349,7 @@ private:
 
 	Plot *graph_dummy;	// placeholder
 
-    Plot *pGraph[32];
+    Plot *pGraph[64];
     QMyCheckBox *checkBox_conc;
     QMyCheckBox *checkBox_vol;
     QMyCheckBox *checkBox_oxy;

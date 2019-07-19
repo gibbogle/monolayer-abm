@@ -203,6 +203,7 @@ do ic = 1,neqn
 			    dCreact = dCreact - (1 - dp%C2(ict,3) + dp%C2(ict,3)*dp%KO2(ict,3)**n_O2(3)/(dp%KO2(ict,3)**n_O2(3) + Cin(OXYGEN)**n_O2(3)))*dp%Kmet0(ict,3)*C
 		    endif
 		    dCreact = dCreact + membrane_flux/vol_cm3
+		    write(*,*) 'dCreact: ',dCreact
 	    endif
         dydt(ic) = dCreact - C*decay_rate
     else    ! medium variable 
@@ -693,7 +694,7 @@ do im = 0,nmet
 		C(k) = chemo(ichemo)%Cmedium(i)
 	enddo
 enddo
-write(nflog,'(a,f8.4)') 'drugsolver: C(1): ',C(1)
+!write(nflog,'(a,f8.4)') 'drugsolver: C(1): ',C(1)
 !write(nflog,'(63e12.5)') C(:)
 
 neqn = k
@@ -754,9 +755,9 @@ do im = 0,nmet
     enddo
     Caverage(MAX_CHEMO + ichemo) = C(k+1)	! not really average, this is medium at the cell layer 
 enddo
-write(nflog,'(a,4e12.3)') 'IC drug conc: ',(Caverage(DRUG_A+k),k=0,nmet)
-write(nflog,'(a,4e12.3)') 'EC drug conc: ',(Caverage(MAX_CHEMO + DRUG_A+k),k=0,nmet)
-write(nflog,'(a,2i4,4e12.3)') 'Cin: ',iparent,DRUG_A,cell_list(1)%Cin(iparent:iparent+nmet)
+!write(nflog,'(a,4e12.3)') 'IC drug conc: ',(Caverage(DRUG_A+k),k=0,nmet)
+!write(nflog,'(a,4e12.3)') 'EC drug conc: ',(Caverage(MAX_CHEMO + DRUG_A+k),k=0,nmet)
+!write(nflog,'(a,2i4,4e12.3)') 'Cin: ',iparent,DRUG_A,cell_list(1)%Cin(iparent:iparent+nmet)
 
 end subroutine
 
