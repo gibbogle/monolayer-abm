@@ -123,7 +123,7 @@ call logger(logmsg)
 if (.not.ok) return
 
 istep = 0
-do ichemo = 1,TRACER
+do ichemo = 1,MAX_CHEMO
 	if (chemo(ichemo)%used) then
 		call InitConcs(ichemo)
 		call SetupMedium(ichemo)
@@ -554,7 +554,6 @@ write(nflog,*) 'Ndrugs_used: ',Ndrugs_used
 is_radiation = .false.
 if (use_events) then
 	call ReadProtocol(nfcell)
-	use_treatment = .false.
 endif
 if (is_radiation) then
     call logger('makeTCP')
@@ -669,9 +668,7 @@ write(nflog,'(a,a)') 'DLL version: ',dll_run_version
 write(nflog,*)
 
 open(nfres,file='monolayer_ts.out',status='replace')
-!write(nfres,'(a,a)') 'GUI version: ',gui_run_version
-!write(nfres,'(a,a)') 'DLL version: ',dll_run_version
-!write(nfres,*)
+if (MAX_METAB == 2) then
 write(nfres,'(a)') 'date info GUI_version DLL_version &
 istep hour Ncells(1) Ncells(2) &
 Nanoxia_dead(1) Nanoxia_dead(2) Naglucosia_dead(1) Naglucosia_dead(2) NdrugA_dead(1) NdrugA_dead(2) &
@@ -684,9 +681,26 @@ f_growth(1) f_growth(2) f_growth(3) &
 plating_efficiency(1) plating_efficiency(2) &
 EC_oxygen EC_glucose EC_drugA EC_drugA_met1 EC_drugA_met2 EC_drugB EC_drugB_met1 EC_drugB_met2 &
 IC_oxygen IC_glucose IC_drugA IC_drugA_met1 IC_drugA_met2 IC_drugB IC_drugB_met1 IC_drugB_met2 &
-medium_oxygen medium_glucose medium_drugA medium_drugA_met1 medium_drugA_met2 medium_drugB medium_drugB_met1 medium_drugB_met2 &
+medium_oxygen medium_glucose &
+medium_drugA medium_drugA_met1 medium_drugA_met2 medium_drugB medium_drugB_met1 medium_drugB_met2 &
 doubling_time Ndivided'
-
+elseif (MAX_METAB == 3) then
+write(nfres,'(a)') 'date info GUI_version DLL_version &
+istep hour Ncells(1) Ncells(2) &
+Nanoxia_dead(1) Nanoxia_dead(2) Naglucosia_dead(1) Naglucosia_dead(2) NdrugA_dead(1) NdrugA_dead(2) &
+NdrugB_dead(1) NdrugB_dead(2) Nradiation_dead(1) Nradiation_dead(2) &
+Ntagged_anoxia(1) Ntagged_anoxia(2) Ntagged_aglucosia(1) Ntagged_aglucosia(2) Ntagged_drugA(1) Ntagged_drugA(2) &
+Ntagged_drugB(1) Ntagged_drugB(2) Ntagged_radiation(1) Ntagged_radiation(2) &
+f_hypox(1) f_hypox(2) f_hypox(3) &
+f_clonohypox(1) f_clonohypox(2) f_clonohypox(3) &
+f_growth(1) f_growth(2) f_growth(3) &
+plating_efficiency(1) plating_efficiency(2) &
+EC_oxygen EC_glucose EC_drugA EC_drugA_met1 EC_drugA_met2 EC_drugA_met3 EC_drugB EC_drugB_met1 EC_drugB_met2 EC_drugB_met3 &
+IC_oxygen IC_glucose IC_drugA IC_drugA_met1 IC_drugA_met2 IC_drugA_met3 IC_drugB IC_drugB_met1 IC_drugB_met2 IC_drugB_met3 &
+medium_oxygen medium_glucose &
+medium_drugA medium_drugA_met1 medium_drugA_met2 medium_drugA_met3 medium_drugB medium_drugB_met1 medium_drugB_met2 medium_drugB_met3 &
+doubling_time Ndivided'
+endif
 write(logmsg,*) 'Opened nfout: ',outputfile
 call logger(logmsg)
 
@@ -754,7 +768,7 @@ end subroutine
 !-----------------------------------------------------------------------------------------
 subroutine ReadDrugData(nf)
 integer :: nf
-integer :: idrug, im, ictyp, ival
+integer :: idrug, im, ictyp, ival, nmet, stat
 character*(16) :: drugname
 
 write(logmsg,*) 'ReadDrugData'
@@ -763,6 +777,7 @@ if (allocated(drug)) then
 	deallocate(drug)
 endif
 allocate(drug(Ndrugs_used))
+stat = 0
 do idrug = 1,Ndrugs_used
 	read(nf,'(a)') drug(idrug)%classname
 	if (drug(idrug)%classname == 'TPZ') then
@@ -770,9 +785,14 @@ do idrug = 1,Ndrugs_used
 	elseif (drug(idrug)%classname == 'DNB') then
 		drug(idrug)%drugclass = DNB_CLASS
 	endif
-	drug(idrug)%nmetabolites = 2			! currently all drugs have 2 metabolites
+	read(nf,*) drug(idrug)%nmetabolites		! currently all drugs have 2 metabolites
+	if (drug(idrug)%nmetabolites > MAX_METAB) then
+		write(logmsg,*) 'ERROR: nmetabolites > MAX_METAB'
+		call logger(logmsg)
+		stop
+	endif
 	drug(idrug)%use_metabolites = .true.	! currently simulate metabolites
-    do im = 0,2			! 0 = parent, 1 = metab_1, 2 = metab_2
+    do im = 0,drug(idrug)%nmetabolites		! 0 = parent, 1 = metab_1, 2 = metab_2
 		read(nf,'(a)') drugname
 		if (im == 0) then
 			drug(idrug)%name = drugname
@@ -817,6 +837,7 @@ do idrug = 1,Ndrugs_used
 		enddo
     enddo
     write(nflog,*) 'drug: ',idrug,drug(idrug)%classname,'  ',drug(idrug)%name
+	write(nflog,*) 'nmetabolites: ',drug(idrug)%nmetabolites
 enddo
 drug_dose_flag = .false.
 end subroutine
@@ -860,9 +881,9 @@ do itime = 1,ntimes
 		drugname = trim(line)
 		write(nflog,*) 'ndrugs_used: ',ndrugs_used
 		do idrug = 1,ndrugs_used
-		write(nflog,*) drugname,drug(idrug)%name
+			write(nflog,*) drugname,drug(idrug)%name
 			if (drugname == drug(idrug)%name) then
-				ichemo = TRACER + 1 + 3*(idrug-1)
+				ichemo = DRUG_A + (MAX_METAB+1)*(idrug-1)
 				exit
 			endif
 		enddo
@@ -963,7 +984,7 @@ if (drug(idrug)%use_metabolites) then
 		write(numstr,'(i1)') im
 		chemo(ichemo+im)%name = trim(chemo(ichemo+im)%name) // numstr
 	enddo
-	im2 = 2
+	im2 = drug(idrug)%nmetabolites
 else
 	im2 = 0
 endif
@@ -1025,7 +1046,7 @@ integer :: idrug, ictyp, im, kill_model
 
 do idrug = 1,ndrugs_used
 	do ictyp = 1,Ncelltypes
-		do im = 0,2
+		do im = 0,drug(idrug)%nmetabolites
 			if (drug(idrug)%kills(ictyp,im)) then
 				C2 = drug(idrug)%C2(ictyp,im)
 				KO2 = drug(idrug)%KO2(ictyp,im)
@@ -1338,7 +1359,7 @@ end subroutine
 !----------------------------------------------------------------------------------
 subroutine ProcessEvent(radiation_dose)
 real(REAL_KIND) :: radiation_dose
-integer :: kevent, ichemo, idrug, im, nmetab
+integer :: kevent, ichemo, idrug, im, nmet
 real(REAL_KIND) :: V, C(MAX_CHEMO)
 type(event_type) :: E
 
@@ -1380,11 +1401,12 @@ do kevent = 1,Nevents
 			! set %present
 			chemo(ichemo)%present = .true.
 			chemo(ichemo)%bdry_conc = 0
-			nmetab = drug(idrug)%nmetabolites
-			do im = 1,nmetab
+			nmet = drug(idrug)%nmetabolites
+			do im = 1,nmet
 				if (chemo(ichemo + im)%used) then
 					chemo(ichemo + im)%present = .true.
 					chemo(ichemo + im)%bdry_conc = 0
+					C(ichemo + im) = 0
 				endif
 			enddo
 			call MediumChange(V,C)
@@ -1396,76 +1418,6 @@ do kevent = 1,Nevents
 enddo
 end subroutine
 
-!----------------------------------------------------------------------------------
-! Radiation treatment is stored in protocol(0)
-! NOT USED NOW
-!----------------------------------------------------------------------------------
-subroutine Treatment(radiation_dose)
-real(REAL_KIND) :: radiation_dose
-integer :: i, idrug, ichemo, nmetab, im	!, ichemo_metab
-
-radiation_dose = 0
-do i = 1,protocol(0)%n
-	if (t_simulation >= protocol(0)%tstart(i) .and. .not.protocol(0)%started(i)) then
-		radiation_dose = protocol(0)%dose(i)
-		protocol(0)%started(i) = .true.
-		protocol(0)%ended(i) = .true.
-		write(nflog,*) 'Radiation started: dose: ',radiation_dose
-		exit
-	endif
-enddo
-do idrug = 1,2
-	ichemo = protocol(idrug)%ichemo
-	if (idrug == 1) then
-		nmetab = 2
-	elseif (idrug == 2) then
-		nmetab = 2
-	endif
-	do i = 1,protocol(idrug)%n
-		if (i == 1 .and. t_simulation < protocol(idrug)%tstart(i)) then
-			chemo(ichemo)%bdry_conc = 0
-			do im = 1,nmetab
-				chemo(ichemo + im)%bdry_conc = 0
-			enddo
-			exit
-		endif
-		if (t_simulation >= protocol(idrug)%tstart(i) .and. .not.protocol(idrug)%started(i)) then
-			chemo(ichemo)%bdry_conc = protocol(idrug)%conc(i)
-			protocol(idrug)%started(i) = .true.
-			protocol(idrug)%ended(i) = .false.
-			chemo(ichemo)%present = .true.
-			call InitConcs(ichemo)
-			call SetupMedium(ichemo)
-			do im = 1,nmetab
-				if (chemo(ichemo + im)%used) then
-					chemo(ichemo + im)%present = .true.
-					call InitConcs(ichemo + im)
-					call SetupMedium(ichemo + im)
-				endif
-			enddo
-			write(nflog,*) 'Started DRUG: ',chemo(ichemo)%name,chemo(ichemo)%bdry_conc, i
-			exit
-		endif
-	enddo
-	do i = 1,protocol(idrug)%n
-		if (t_simulation >= protocol(idrug)%tend(i) .and. .not.protocol(idrug)%ended(i)) then
-			chemo(ichemo)%bdry_conc = 0
-			protocol(idrug)%ended(i) = .true.
-			call InitConcs(ichemo)
-			call SetupMedium(ichemo)
-			do im = 1,nmetab
-				chemo(ichemo + im)%bdry_conc = 0
-				if (chemo(ichemo + im)%used) then
-					call InitConcs(ichemo + im)
-					call SetupMedium(ichemo + im)
-				endif
-			enddo
-			write(nflog,*) 'Ended DRUG: ',chemo(ichemo)%name,i
-			exit
-		endif
-	enddo
-enddo	
-end subroutine
 
 !-----------------------------------------------------------------------------------------
 ! If the volume removed is Vr, the fraction of constituent mass that is retained
@@ -1480,7 +1432,7 @@ subroutine MediumChange(Ve,Ce)
 real(REAL_KIND) :: Ve, Ce(:)
 real(REAL_KIND) :: R, Vm, Vr, Vcells, mass(MAX_CHEMO)
 real(REAL_KIND) :: O2_bdry
-integer :: ichemo, idrug, im, iparent
+integer :: ichemo, idrug, im, iparent, nmet
 
 write(nflog,*)
 write(nflog,*) 'MediumChange:'
@@ -1506,11 +1458,13 @@ Caverage(OXYGEN) = Ce(OXYGEN)
 chemo(OXYGEN)%Cmedium = Ce(OXYGEN)
 write(nflog,'(a,13f8.4)') 'Caverage: ',Caverage(MAX_CHEMO+1:2*MAX_CHEMO)
 
-!chemo(OXYGEN)%bdry_conc = Ce(OXYGEN)
 chemo(GLUCOSE)%Cmedium = Caverage(MAX_CHEMO+GLUCOSE)
-do idrug = 1,2
-	iparent = DRUG_A + 3*(idrug-1)
-	do im = 0,2
+
+do idrug = 1,Ndrugs_used
+	iparent = DRUG_A + (MAX_METAB+1)*(idrug-1)
+	if (.not.chemo(iparent)%present) cycle
+	nmet = drug(idrug)%nmetabolites
+	do im = 0,nmet
 		ichemo = iparent + im	
 		chemo(ichemo)%Cmedium = Caverage(MAX_CHEMO+ichemo)
 		Caverage(ichemo) = Caverage(MAX_CHEMO+ichemo)	! this is a measure to overcome convergence problem on 1st time step
@@ -1572,15 +1526,6 @@ enddo
 do kcell = 1,nlist
     if (cell_list(kcell)%state == DEAD) cycle
     cell_list(kcell)%Cin(OXYGEN) = Cin
-! What is this doing here???
-!	do idrug = 1,2
-!		iparent = DRUG_A + 3*(idrug-1) 
-!		do im = 0,2
-!			ichemo = iparent + im
-!			if (.not.chemo(ichemo)%present) cycle
-!			cell_list(kcell)%Cin(ichemo) = chemo(ichemo)%Cmedium(1)		! set IC conc to initial medium conc
-!		enddo
-!	enddo
 enddo
 	
 end subroutine
@@ -1637,9 +1582,6 @@ bdry_debug = (istep >= 250000)
 
 !istep = istep + 1
 t_simulation = istep*DELTA_T	! seconds
-if (use_treatment) then     ! now we use events
-	call treatment(radiation_dose)
-endif
 if (use_events) then
 	call ProcessEvent(radiation_dose)
 endif
@@ -1695,43 +1637,11 @@ do idiv = 0,ndiv-1
 	!write(nflog,*) 'did Solver'
 	call CheckDrugConcs
 	call CheckDrugPresence
-
 enddo
 DELTA_T = DELTA_T_save
 medium_change_step = .false.
 
-! Try moving this
-!istep = istep + 1
-!t_simulation = istep*DELTA_T	! seconds
-!radiation_dose = 0
-!if (use_treatment) then     ! now we use events
-!	call treatment(radiation_dose)
-!endif
-!if (use_events) then
-!	call ProcessEvent(radiation_dose)
-!endif
-!if (radiation_dose > 0) then
-!	write(logmsg,'(a,f6.1)') 'Radiation dose: ',radiation_dose
-!	call logger(logmsg)
-!endif
-!if (dbug) write(nflog,*) 'GrowCells'
-!call GrowCells(radiation_dose,DELTA_T,ok)
-!if (dbug) write(nflog,*) 'did GrowCells'
-!if (.not.ok) then
-!	res = 3
-!	return
-!endif
-
-
-!write(nfout,'(i6,f8.2,7e12.3)') istep,istep/real(nthour),Caverage(1),Caverage(5:7), &
-!	Caverage(MAX_CHEMO+5:MAX_CHEMO+7)
-
 res = 0
-
-!call test_CellDivision
-!if (.not.use_TCP .and. (mod(istep,6) == 0)) then
-!	call get_concdata(nvars, ns, dxc, ex_conc)
-!endif
 
 if (dbug .or. mod(istep,nthour) == 0) then
 	write(logmsg,'(a,2i6,a,3i8)') &
@@ -1740,8 +1650,6 @@ if (dbug .or. mod(istep,nthour) == 0) then
 !	call showcells
 endif
 ! write(nflog,'(a,f8.3)') 'did simulate_step: time: ',wtime()-start_wtime
-
-!call showcell(39)
 
 istep = istep + 1
 
@@ -2004,33 +1912,7 @@ logical :: isopen
 
 call logger('doing wrapup ...')
 ierr = 0
-!if (allocated(zoffset)) deallocate(zoffset)
-!if (allocated(zdomain)) deallocate(zdomain)
 if (allocated(gaplist)) deallocate(gaplist,stat=ierr)
-!if (allocated(occupancy)) deallocate(occupancy)
-!if (allocated(cell_list)) deallocate(cell_list)
-!if (allocated(allstate)) deallocate(allstate)
-!if (allocated(allstatep)) deallocate(allstatep)
-!if (allocated(work_rkc)) deallocate(work_rkc)
-!do ichemo = 1,MAX_CHEMO
-!	if (allocated(chemo(ichemo)%coef)) deallocate(chemo(ichemo)%coef)
-!	if (allocated(chemo(ichemo)%conc)) deallocate(chemo(ichemo)%conc)
-!	if (allocated(chemo(ichemo)%grad)) deallocate(chemo(ichemo)%grad)
-!enddo
-!if (allocated(ODEdiff%ivar)) deallocate(ODEdiff%ivar)
-!if (allocated(ODEdiff%varsite)) deallocate(ODEdiff%varsite)
-!if (allocated(ODEdiff%icoef)) deallocate(ODEdiff%icoef)
-if (allocated(protocol)) then
-	do idrug = 0,2	!<------  change this to a variable
-		if (allocated(protocol(idrug)%tstart)) deallocate(protocol(idrug)%tstart)
-		if (allocated(protocol(idrug)%tend)) deallocate(protocol(idrug)%tend)
-		if (allocated(protocol(idrug)%conc)) deallocate(protocol(idrug)%conc)
-		if (allocated(protocol(idrug)%dose)) deallocate(protocol(idrug)%dose)
-		if (allocated(protocol(idrug)%started)) deallocate(protocol(idrug)%started)
-		if (allocated(protocol(idrug)%ended)) deallocate(protocol(idrug)%ended)
-	enddo
-	deallocate(protocol)
-endif
 call logger('deallocated all arrays')
 
 ! Close all open files

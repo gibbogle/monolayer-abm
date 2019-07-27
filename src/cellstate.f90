@@ -148,16 +148,15 @@ real(REAL_KIND) ::C_O2, SER
 real(REAL_KIND) :: Cs							! concentration of radiosensitising drug
 real(REAL_KIND) :: SER_max0, SER_Km, SER_KO2	! SER parameters of the drug
 real(REAL_KIND) :: SERmax						! max sensitisation at the drug concentration
-integer :: ityp, idrug, iparent, ichemo, im
+integer :: ityp, idrug, iparent, ichemo, im, nmet
 
 ityp = cp%celltype
 SER = 1.0
 do idrug = 1,Ndrugs_used
-!    ichemo = TRACER + 3*(idrug-1)
-    iparent = TRACER + 1 + 3*(idrug-1)
+	nmet = drug(idrug)%nmetabolites
+    iparent = DRUG_A + (MAX_METAB+1)*(idrug-1)
     if (.not.chemo(ichemo)%present) cycle
-    do im = 0,2
-!	    ichemo = 4 + 3*(idrug-1) + im
+    do im = 0,nmet
 	    ichemo = iparent + im
 	    if (drug(idrug)%sensitises(ityp,im)) then
 		    Cs = cp%Cin(ichemo)	! concentration of drug/metabolite in the cell
@@ -220,7 +219,7 @@ end subroutine
 subroutine CellDeath(dt,ok)
 real(REAL_KIND) :: dt
 logical :: ok
-integer :: kcell, nlist0, site(3), i, ichemo, idrug, im, ityp, kill_model, kpar=0 
+integer :: kcell, nlist0, site(3), i, ichemo, idrug, im, ityp, kill_model, nmet, kpar=0 
 real(REAL_KIND) :: C_O2, C_glucose, Cdrug, n_O2, kmet, Kd, dMdt, kill_prob, dkill_prob, death_prob, survival_prob, R, c, ctot
 logical :: anoxia_death, aglucosia_death
 type(drug_type), pointer :: dp
@@ -295,7 +294,8 @@ do kcell = 1,nlist
 	
 	flag = (kcell == 1)
 	do idrug = 1,ndrugs_used
-		ichemo = DRUG_A + 3*(idrug-1)
+	nmet = drug(idrug)%nmetabolites
+		ichemo = DRUG_A + (MAX_METAB+1)*(idrug-1)
 !		if (.not.flag) write(nflog,'(a,i3,2x,L)') 'idrug present?: ',idrug,chemo(ichemo)%present
 		if (.not.chemo(ichemo)%present) cycle
 		if (cp%drug_tag(idrug)) cycle	! don't tag more than once
@@ -304,7 +304,7 @@ do kcell = 1,nlist
 		death_prob = 0
 		survival_prob = 1
 		ctot = 0
-		do im = 0,2
+		do im = 0,nmet
 			if (.not.dp%kills(ityp,im)) cycle
 			if (flag) write(nflog,*) 'kcell,im: ',kcell,im
 			kill_model = dp%kill_model(ityp,im)		! could use %drugclass to separate kill modes

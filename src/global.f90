@@ -33,6 +33,8 @@ integer, parameter :: DIVIDE_USE_CLEAR_SITE_RANDOM  = 3
 integer, parameter :: nfin=10, nfout=11, nflog=12, nfres=13, nfrun=14, nfcell=15, nftreatment=16, nfprofile=17, nfslice=18
 integer, parameter :: neumann(3,6) = reshape((/ -1,0,0, 1,0,0, 0,-1,0, 0,1,0, 0,0,-1, 0,0,1 /), (/3,6/))
 
+integer, parameter :: MAX_METAB = 3
+
 integer, parameter :: CFSE = 0
 integer, parameter :: OXYGEN = 1
 integer, parameter :: GLUCOSE = 2
@@ -42,11 +44,13 @@ integer, parameter :: DRUG_A = 5
 integer, parameter :: TPZ_DRUG = DRUG_A
 integer, parameter :: TPZ_DRUG_METAB_1 = TPZ_DRUG + 1
 integer, parameter :: TPZ_DRUG_METAB_2 = TPZ_DRUG + 2
-integer, parameter :: DRUG_B = DRUG_A + 3
+integer, parameter :: TPZ_DRUG_METAB_3 = TPZ_DRUG + 3
+integer, parameter :: DRUG_B = DRUG_A + 1 + MAX_METAB
 integer, parameter :: DNB_DRUG = DRUG_B
 integer, parameter :: DNB_DRUG_METAB_1 = DNB_DRUG + 1
 integer, parameter :: DNB_DRUG_METAB_2 = DNB_DRUG + 2
-integer, parameter :: MAX_CHEMO = DRUG_B + 2
+integer, parameter :: DNB_DRUG_METAB_3 = DNB_DRUG + 3
+integer, parameter :: MAX_CHEMO = DRUG_B + MAX_METAB
 integer, parameter :: GROWTH_RATE = MAX_CHEMO + 1	! (not used here, used in the GUI)
 integer, parameter :: CELL_VOLUME = MAX_CHEMO + 2
 integer, parameter :: O2_BY_VOL = MAX_CHEMO + 3
@@ -68,7 +72,7 @@ integer, parameter :: EXTRA = 1
 integer, parameter :: INTRA = 2
 integer, parameter :: MAX_CELLTYPES = 2
 integer, parameter :: MAX_DRUGTYPES = 2
-integer, parameter :: max_nlist = 500000
+integer, parameter :: max_nlist = 300000
 integer, parameter :: NRF = 4
 integer, parameter :: LIMIT_THRESHOLD = 1500
 
@@ -90,15 +94,6 @@ logical, parameter :: OFF_LATTICE = .false.
 real(REAL_KIND), parameter :: PI = 4.0*atan(1.0)
 real(REAL_KIND), parameter :: CFSE_std = 0.05
 real(REAL_KIND), parameter :: small_d = 0.1e-4          ! 0.1 um -> cm
-
-!type occupancy_type
-!	integer :: indx(2)
-!	real(REAL_KIND) :: C(MAX_CHEMO)
-!	type(boundary_type), pointer :: bdry
-!	! for FD grid weighting
-!	integer :: cnr(3,8)
-!	real(REAL_KIND) :: wt(8)
-!end type
 
 type cell_type
 	integer :: ID
@@ -175,30 +170,30 @@ type drug_type
 	character*(16)  :: name
 	integer         :: nmetabolites
 	logical         :: use_metabolites
-	real(REAL_KIND) :: diff_coef(0:2)
-	real(REAL_KIND) :: medium_diff_coef(0:2)
-	real(REAL_KIND) :: membrane_diff_in(0:2)
-	real(REAL_KIND) :: membrane_diff_out(0:2)
-	real(REAL_KIND) :: halflife(0:2)
-	logical         :: kills(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: Kmet0(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: C2(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: KO2(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: n_O2(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: Vmax(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: Km(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: Klesion(MAX_CELLTYPES,0:2)
-	integer         :: kill_model(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: death_prob(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: Kd(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: kill_O2(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: kill_drug(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: kill_duration(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: kill_fraction(MAX_CELLTYPES,0:2)
-	logical         :: sensitises(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: SER_max(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: SER_Km(MAX_CELLTYPES,0:2)
-	real(REAL_KIND) :: SER_KO2(MAX_CELLTYPES,0:2)
+	real(REAL_KIND) :: diff_coef(0:MAX_METAB)
+	real(REAL_KIND) :: medium_diff_coef(0:MAX_METAB)
+	real(REAL_KIND) :: membrane_diff_in(0:MAX_METAB)
+	real(REAL_KIND) :: membrane_diff_out(0:MAX_METAB)
+	real(REAL_KIND) :: halflife(0:MAX_METAB)
+	logical         :: kills(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: Kmet0(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: C2(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: KO2(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: n_O2(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: Vmax(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: Km(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: Klesion(MAX_CELLTYPES,0:MAX_METAB)
+	integer         :: kill_model(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: death_prob(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: Kd(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: kill_O2(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: kill_drug(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: kill_duration(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: kill_fraction(MAX_CELLTYPES,0:MAX_METAB)
+	logical         :: sensitises(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: SER_max(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: SER_Km(MAX_CELLTYPES,0:MAX_METAB)
+	real(REAL_KIND) :: SER_KO2(MAX_CELLTYPES,0:MAX_METAB)
 end type
 
 !type boundary_type
@@ -268,48 +263,22 @@ type savedata_type
 end type
 
 type(dist_type) :: divide_dist(MAX_CELLTYPES)
-!type(occupancy_type), allocatable :: occupancy(:,:,:)
 type(cell_type), allocatable, target :: cell_list(:)
-type(treatment_type), allocatable :: protocol(:)
 type(event_type), allocatable :: event(:)
-!real(REAL_KIND), allocatable, target :: Cslice(:,:,:,:)
 type(cell_type), target, allocatable :: ccell_list(:)
 
 character*(12) :: dll_version, dll_run_version
 character*(12) :: gui_version, gui_run_version
-!integer :: NX, NY, NZ, NXB, NYB, NZB
-!integer :: ixb0, iyb0, izb0
 integer :: initial_count
-!integer, allocatable :: zdomain(:),zoffset(:)
-!integer :: blobrange(3,2)
-!real(REAL_KIND) :: Radius, Centre(3)		! sphere radius and centre
-!real(REAL_KIND) :: x0,y0,z0					! initial sphere centre in lattice coordinates (units = sites)
-!real(REAL_KIND) :: Centre_b(3)              ! sphere centre in coarse grid axes
-!real(REAL_KIND) :: xb0,yb0,zb0              ! sphere centre in coarse grid axes
-!real(REAL_KIND) :: blob_volume, blob_area       ! blob volume, max z-slice area (units = sites)
-!real(REAL_KIND) :: blob_centre(3), blob_radius  ! blob centre, radius in lattice coordinates (units = sites)
-!real(REAL_KIND) :: Vex_min, Vex_max
-
-!logical :: use_dropper
-!integer :: Ndrop
-!real(REAL_KIND) :: alpha_shape, beta_shape	! squashed sphere shape parameters
-!real(REAL_KIND) :: adrop, bdrop, cdrop		! drop shape transformation parameters
-!integer :: zmin     						! drop lower bound at drop time = lower limit of blob thereafter
-!logical :: is_dropped
-
-!integer :: jumpvec(3,27)
 
 integer :: nlist, Ncells, Ncells0, ncells_mphase, lastNcells, lastID, Ncelltypes, Ncells_type(MAX_CELLTYPES)
-!integer :: diam_count_limit
 logical :: limit_stop
-!integer :: nadd_sites, Nsites, Nreuse
 integer :: Ndrugs_used
 integer :: Nradiation_tag(MAX_CELLTYPES), Nanoxia_tag(MAX_CELLTYPES), Naglucosia_tag(MAX_CELLTYPES)
 integer :: Ndrug_tag(MAX_DRUGTYPES,MAX_CELLTYPES)
 integer :: Nradiation_dead(MAX_CELLTYPES), Nanoxia_dead(MAX_CELLTYPES), Naglucosia_dead(MAX_CELLTYPES)
 integer :: Ndrug_dead(MAX_DRUGTYPES,MAX_CELLTYPES)
 logical :: use_radiation_growth_delay_all = .true.
-!logical :: radiation_dosed
 
 integer :: ndoublings
 real(REAL_KIND) :: doubling_time_sum
@@ -364,7 +333,7 @@ logical :: use_TCP = .true.         ! turned off in para_main()
 logical :: use_CPORT1 = .false.
 logical :: stopped, clear_to_send
 logical :: simulation_start, par_zig_init, initialized
-logical :: use_radiation, use_treatment
+logical :: use_radiation
 !logical :: use_growth_suppression = .true.	! see usage in subroutine CellGrowth
 logical :: use_extracellular_O2 = .false.
 logical :: use_V_dependence

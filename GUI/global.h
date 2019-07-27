@@ -13,12 +13,14 @@
 #define DRUG_A_PARENT 5
 #define DRUG_A_METAB_1 6
 #define DRUG_A_METAB_2 7
-#define DRUG_B_PARENT 8
-#define DRUG_B_METAB_1 9
-#define DRUG_B_METAB_2 10
-#define GROWTH_RATE 11      // we pretend that this is a concentration
-#define CELL_VOLUME 12
-#define O2_BY_VOL 13
+#define DRUG_A_METAB_3 8
+#define DRUG_B_PARENT 9
+#define DRUG_B_METAB_1 10
+#define DRUG_B_METAB_2 11
+#define DRUG_B_METAB_3 12
+#define GROWTH_RATE 13      // we pretend that this is a concentration
+#define CELL_VOLUME 14
+#define O2_BY_VOL 15
 
 // The intracellular (IC) dataIndex is the same as extracellular, from the tag determine which
 #define IC_MULTI -1
@@ -30,12 +32,14 @@
 #define IC_DRUG_A_PARENT 5
 #define IC_DRUG_A_METAB_1 6
 #define IC_DRUG_A_METAB_2 7
-#define IC_DRUG_B_PARENT 8
-#define IC_DRUG_B_METAB_1 9
-#define IC_DRUG_B_METAB_2 10
-#define IC_GROWTH_RATE 11      // we pretend that this is a concentration
-#define IC_CELL_VOLUME 12
-#define IC_O2_BY_VOL 13
+#define IC_DRUG_A_METAB_3 8
+#define IC_DRUG_B_PARENT 9
+#define IC_DRUG_B_METAB_1 10
+#define IC_DRUG_B_METAB_2 11
+#define IC_DRUG_B_METAB_3 12
+#define IC_GROWTH_RATE 13      // we pretend that this is a concentration
+#define IC_CELL_VOLUME 14
+#define IC_O2_BY_VOL 15
 
 #define DIST_NV 20
 

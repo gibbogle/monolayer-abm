@@ -22,7 +22,7 @@ implicit none
 integer :: ivdbug
 
 !real(REAL_KIND) :: work_rkc(8+5*2*MAX_CHEMO)
-real(REAL_KIND) :: work_rkc(8+5*3*(N1D+1))
+real(REAL_KIND) :: work_rkc(8+5*(MAX_METAB+1)*(N1D+1))
 logical :: chemo_active(2*MAX_CHEMO)    ! flags necessity to solve for the constituent
 real(REAL_KIND) :: CO2_rkc				! O2 concentration for f_rkc_drug
 integer :: idrug_rkc					! drug number for f_rkc_drug
@@ -31,16 +31,17 @@ contains
 !----------------------------------------------------------------------------------
 !----------------------------------------------------------------------------------
 subroutine CheckDrugConcs
-integer :: ndrugs_present, drug_present(3*MAX_DRUGTYPES), drug_number(3*MAX_DRUGTYPES)
-integer :: idrug, iparent, im, kcell, ichemo, i
+integer :: ndrugs_present, drug_present((MAX_METAB+1)*MAX_DRUGTYPES), drug_number((MAX_METAB+1)*MAX_DRUGTYPES)
+integer :: idrug, iparent, im, kcell, ichemo, i, nmet
 type(cell_type), pointer :: cp
 
 ndrugs_present = 0
 drug_present = 0
 do idrug = 1,ndrugs_used
-	iparent = TRACER + 1 + 3*(idrug-1)
+	nmet = drug(idrug)%nmetabolites
+	iparent = DRUG_A + (MAX_METAB+1)*(idrug-1)
 	if (chemo(iparent)%present) then		! simulation with this drug has started
-	    do im = 0,2
+	    do im = 0,nmet
 	        ichemo = iparent + im
 	        ndrugs_present = ndrugs_present + 1
 	        drug_present(ndrugs_present) = ichemo
@@ -95,8 +96,8 @@ integer :: neqn, icase
 real(REAL_KIND) :: t, y(neqn), dydt(neqn)
 integer :: ic, ichemo, idrug, im, ict, Ng, ncvars
 real(REAL_KIND) :: dCsum, dCdiff, dCreact, vol_cm3, val, Cin(MAX_CHEMO), Cmedium(MAX_CHEMO), Cex
-real(REAL_KIND) :: decay_rate, C, membrane_kin, membrane_kout, membrane_flux, area_factor, n_O2(0:2)
-logical :: metabolised(MAX_CELLTYPES,0:2)
+real(REAL_KIND) :: decay_rate, C, membrane_kin, membrane_kout, membrane_flux, area_factor, n_O2(0:MAX_METAB)
+logical :: metabolised(MAX_CELLTYPES,0:MAX_METAB)
 real(REAL_KIND) :: metab, cell_flux, dMdt, KmetC, vcell_actual, dC, C0
 type(drug_type), pointer :: dp
 real(REAL_KIND) :: average_volume = 1.2
@@ -134,8 +135,8 @@ do ic = 1,neqn
     endif
     is_metab1 = (ichemo == 5)
     if (ichemo > TRACER) then
-        idrug = (ichemo - TRACER - 1)/3 + 1
-        im = ichemo - TRACER - 1 - 3*(idrug-1)		! 0 = drug, 1 = metab1, 2 = metab2
+        idrug = (ichemo - DRUG_A)/(MAX_METAB+1) + 1
+        im = ichemo - DRUG_A - (MAX_METAB+1)*(idrug-1)		! 0 = drug, 1 = metab1, 2 = metab2
         dp => drug(idrug)
         metabolised(:,:) = (dp%Kmet0(:,:) > 0)
         if (idrug > 0) then
@@ -194,6 +195,14 @@ do ic = 1,neqn
 			    dCreact = dCreact - (1 - dp%C2(ict,2) + dp%C2(ict,2)*dp%KO2(ict,2)**n_O2(2)/(dp%KO2(ict,2)**n_O2(2) + Cin(OXYGEN)**n_O2(2)))*dp%Kmet0(ict,2)*C
 		    endif
 		    dCreact = dCreact + membrane_flux/vol_cm3
+	    elseif (im == 3) then	! ichemo-1 is the METAB2
+		    if (metabolised(ict,2) .and. Cin(ichemo-1) > 0) then
+			    dCreact = (1 - dp%C2(ict,2) + dp%C2(ict,2)*dp%KO2(ict,2)**n_O2(2)/(dp%KO2(ict,2)**n_O2(2) + Cin(OXYGEN)**n_O2(2)))*dp%Kmet0(ict,2)*Cin(ichemo-1)
+		    endif
+		    if (metabolised(ict,3) .and. C > 0) then
+			    dCreact = dCreact - (1 - dp%C2(ict,3) + dp%C2(ict,3)*dp%KO2(ict,3)**n_O2(3)/(dp%KO2(ict,3)**n_O2(3) + Cin(OXYGEN)**n_O2(3)))*dp%Kmet0(ict,3)*C
+		    endif
+		    dCreact = dCreact + membrane_flux/vol_cm3
 	    endif
         dydt(ic) = dCreact - C*decay_rate
     else    ! medium variable 
@@ -218,10 +227,10 @@ end subroutine
 subroutine f_rkc_drug(neqn,t,y,dydt,icase)
 integer :: neqn, icase
 real(REAL_KIND) :: t, y(neqn), dydt(neqn)
-integer :: k, kk, i, ichemo, idrug, iparent, im, ict
+integer :: k, kk, i, ichemo, idrug, iparent, im, ict, nmet
 real(REAL_KIND) :: dCsum, dCdiff, dCreact, vol_cm3, Cex
-real(REAL_KIND) :: decay_rate, C, membrane_kin, membrane_kout, membrane_flux, area_factor, n_O2(0:2)
-logical :: metabolised(MAX_CELLTYPES,0:2)
+real(REAL_KIND) :: decay_rate, C, membrane_kin, membrane_kout, membrane_flux, area_factor, n_O2(0:MAX_METAB)
+logical :: metabolised(MAX_CELLTYPES,0:MAX_METAB)
 real(REAL_KIND) :: metab, cell_flux, dMdt, KmetC, vcell_actual, dC, CO2, A, d, dX, dV, Kd, KdAVX
 type(drug_type), pointer :: dp
 real(REAL_KIND) :: average_volume = 1.2
@@ -231,6 +240,7 @@ logical :: is_metab1
 ict = icase
 CO2 = CO2_rkc
 idrug = idrug_rkc
+nmet = drug(idrug)%nmetabolites
 A = well_area
 d = total_volume/A
 dX = d/N1D
@@ -240,13 +250,13 @@ if (use_average_volume) then
     area_factor = (average_volume)**(2./3.)
 endif
 
-iparent = DRUG_A + 3*(idrug-1)
+iparent = DRUG_A + (MAX_METAB+1)*(idrug-1)
 dp => drug(idrug)
 metabolised(:,:) = (dp%Kmet0(:,:) > 0)
 n_O2(:) = dp%n_O2(ict,:)
 
 k = 0
-do im = 0,2
+do im = 0,nmet
 	! First process IC reactions
 	k = k+1
 	C = y(k)
@@ -287,6 +297,15 @@ do im = 0,2
 		    dCreact = dCreact - (1 - dp%C2(ict,2) + dp%C2(ict,2)*dp%KO2(ict,2)**n_O2(2)/(dp%KO2(ict,2)**n_O2(2) + CO2**n_O2(2)))*dp%Kmet0(ict,2)*C
 	    endif
 	    dCreact = dCreact + membrane_flux/vol_cm3
+    elseif (im == 3) then	! kk=2*N1D+3 is the METAB2
+		kk = 2*N1D+3
+	    if (metabolised(ict,2) .and. y(kk) > 0) then
+		    dCreact = (1 - dp%C2(ict,2) + dp%C2(ict,2)*dp%KO2(ict,2)**n_O2(2)/(dp%KO2(ict,2)**n_O2(2) + CO2**n_O2(2)))*dp%Kmet0(ict,2)*y(kk)
+	    endif
+	    if (metabolised(ict,3) .and. C > 0) then
+		    dCreact = dCreact - (1 - dp%C2(ict,3) + dp%C2(ict,3)*dp%KO2(ict,3)**n_O2(3)/(dp%KO2(ict,3)**n_O2(3) + CO2**n_O2(3)))*dp%Kmet0(ict,3)*C
+	    endif
+	    dCreact = dCreact + membrane_flux/vol_cm3
     endif
 	dydt(k) = dCreact - C*decay_rate
 !	write(nflog,'(a,i4,e12.3)') 'dydt: ',im,dydt(k)
@@ -303,7 +322,6 @@ do im = 0,2
 !	F(2) = Kd*A*(C - y(k+1)/dX
 !	dydt(k) = (F(1) - F(2))/dV - C*decay_rate
 	dydt(k) = (-Ncells*membrane_flux - Kd*A*(C - y(k+1))/dX)/dV - C*decay_rate
-	
 	! Next compute diffusion and decay on the FD grid
 	KdAVX = Kd*A/(dV*dX)
 	do i = 2,N1D
@@ -450,113 +468,6 @@ k = 0
 	enddo
 end subroutine
 
-!----------------------------------------------------------------------------------
-!----------------------------------------------------------------------------------
-subroutine Solver1(it,tstart,dt,nc,ok)
-integer :: it, nc
-real(REAL_KIND) :: tstart, dt
-logical :: ok
-integer :: ichemo, ic, k, ict, ncvars, neqn, kcell, i
-real(REAL_KIND) :: t, tend
-real(REAL_KIND) :: C(2*MAX_CHEMO), Csum
-real(REAL_KIND) :: timer1, timer2
-! Variables for RKC
-integer :: info(4), idid
-real(REAL_KIND) :: rtol, atol(1)
-type(rkc_comm) :: comm_rkc(1)
-logical :: solve_O2 = .true.
-logical :: use_drugsolver = .true.
-
-ok = .true.
-k = 0
-do ic = 1,nchemo
-	ichemo = chemomap(ic)
-	k = k + 1
-    chemo_active(k) = .not.chemo(ichemo)%constant
-    if (ichemo == OXYGEN) then
-        if (.not.solve_O2) then
-            ! Suppress solving for cell oxygen
-!	        Caverage(OXYGEN) = getCin(OXYGEN,Caverage(MAX_CHEMO+OXYGEN))
-            chemo_active(k) = .false.
-        endif
-    endif
-	if (use_drugsolver .and. ichemo >= DRUG_A) then
-        chemo_active(k) = .false.
-	endif	
-	C(k) = Caverage(ichemo)                ! average cell concentration
-enddo
-ncvars = k
-! Note: ncvars = nchemo
-do ic = 1,nchemo
-	ichemo = chemomap(ic)
-	k = k + 1
-	C(k) = Caverage(MAX_CHEMO + ichemo)      ! average EC concentration
-    chemo_active(k) = .not.chemo(ichemo)%constant
-    if (ichemo == OXYGEN) then
-        ! Suppress solving for medium oxygen
-        chemo_active(k) = .false.
-    endif
-	if (use_drugsolver .and. ichemo >= DRUG_A) then
-        chemo_active(k) = .false.
-	endif	
-enddo
-neqn = k
-! Note: neqn = 2*ncvars
-
-!write(*,*) 'solver: nchemo,neqn: ',nchemo,neqn
-!write(*,'(10f7.3)') C(1:neqn)
-!write(*,'(a,3f8.5)') 'solver: metab1: ',Caverage(MAX_CHEMO+4:MAX_CHEMO+6)
-
-ict = 1 ! for now just a single cell type
-
-info(1) = 1
-info(2) = 1		! = 1 => use spcrad() to estimate spectral radius, != 1 => let rkc do it
-info(3) = 1
-info(4) = 0
-rtol = 1d-5
-atol = rtol
-
-idid = 0
-t = tstart
-tend = t + dt
-call rkc(comm_rkc(1),neqn,f_rkc,C,t,tend,rtol,atol,info,work_rkc,idid,ict)
-if (idid /= 1) then
-	write(logmsg,*) 'Solver: Failed at t = ',t,' with idid = ',idid
-	call logger(logmsg)
-	ok = .false.
-	return
-endif
-
-! This determines average cell concentrations, assumed the same for all cells
-! Now put the concentrations into the cells
-
-k = 0
-do ic = 1,nchemo
-    ichemo = chemomap(ic)
-    k = k + 1
-    if (.not.chemo_active(k)) cycle
-    Caverage(ichemo) = C(k)
-    do kcell = 1,nlist
-        if (cell_list(kcell)%state == DEAD) cycle
-        cell_list(kcell)%Cin(ichemo) = Caverage(ichemo)
-    enddo
-enddo
-k = ncvars
-do ic = 1,nchemo
-    ichemo = chemomap(ic)
-    k = k + 1
-    if (.not.chemo_active(k)) cycle
-    Caverage(MAX_CHEMO + ichemo) = C(k)
-enddo
-
-if (.not.use_drugsolver) return
-if (chemo(DRUG_A)%present) then
-	call DrugSolver(DRUG_A,tstart,dt,1,ok)
-endif
-if (chemo(DRUG_B)%present) then
-	call DrugSolver(DRUG_B,tstart,dt,2,ok)
-endif
-end subroutine
 
 !----------------------------------------------------------------------------------
 ! Now solve for GLUCOSE in 1D medium
@@ -758,9 +669,9 @@ subroutine DrugSolver(iparent,tstart,dt,idrug,ok)
 integer :: iparent, idrug
 real(REAL_KIND) :: tstart, dt
 logical :: ok
-integer :: ichemo, k, ict, neqn, i, kcell, im
+integer :: ichemo, k, ict, neqn, i, kcell, im, nmet
 real(REAL_KIND) :: t, tend
-real(REAL_KIND) :: C(3*N1D+3), Csum, decay_rate
+real(REAL_KIND) :: C((MAX_METAB+1)*(N1D+1)), Csum, decay_rate
 real(REAL_KIND) :: timer1, timer2
 ! Variables for RKC
 integer :: info(4), idid
@@ -770,9 +681,9 @@ type(rkc_comm) :: comm_rkc(1)
 !write(nflog,*) 'DrugSolver: ',istep
 ict = selected_celltype
 idrug_rkc = idrug
-
+nmet = drug(idrug)%nmetabolites
 k = 0
-do im = 0,2
+do im = 0,nmet
 	ichemo = iparent + im
 	if (.not.chemo(ichemo)%present) cycle
 	k = k+1
@@ -813,7 +724,7 @@ endif
 ! This determines average cell concentrations, assumed the same for all cells
 ! Now put the concentrations into the cells 
 
-do im = 0,2
+do im = 0,nmet
     ichemo = iparent + im
 	if (.not.chemo(ichemo)%present) cycle
     k = im*(N1D+1) + 1
@@ -843,9 +754,9 @@ do im = 0,2
     enddo
     Caverage(MAX_CHEMO + ichemo) = C(k+1)	! not really average, this is medium at the cell layer 
 enddo
-write(nflog,'(a,3e12.3)') 'IC drug conc: ',(Caverage(DRUG_A+k),k=0,2)
-write(nflog,'(a,3e12.3)') 'EC drug conc: ',(Caverage(MAX_CHEMO + DRUG_A+k),k=0,2)
-write(nflog,'(a,2i4,3e12.3)') 'Cin: ',iparent,DRUG_A,cell_list(1)%Cin(iparent:iparent+2)
+write(nflog,'(a,4e12.3)') 'IC drug conc: ',(Caverage(DRUG_A+k),k=0,nmet)
+write(nflog,'(a,4e12.3)') 'EC drug conc: ',(Caverage(MAX_CHEMO + DRUG_A+k),k=0,nmet)
+write(nflog,'(a,2i4,4e12.3)') 'Cin: ',iparent,DRUG_A,cell_list(1)%Cin(iparent:iparent+nmet)
 
 end subroutine
 
@@ -1038,17 +949,18 @@ integer :: kpar = 0
 integer :: i, ic, ichemo
 real(REAL_KIND) :: tnow, alpha_Cbnd = 0.3
 real(REAL_KIND) :: t_buffer = 3600	! one hour delay before applying smoothing to Cbnd
-integer :: ndrugs_present, drug_present(3*MAX_DRUGTYPES), drug_number(3*MAX_DRUGTYPES)
-integer :: idrug, iparent, im
+integer :: ndrugs_present, drug_present((MAX_METAB+1)*MAX_DRUGTYPES), drug_number((MAX_METAB+1)*MAX_DRUGTYPES)
+integer :: idrug, iparent, im, nmet
 logical :: present
 
 tnow = istep*DELTA_T
 ndrugs_present = 0
 drug_present = 0
 do idrug = 1,ndrugs_used
-	iparent = DRUG_A + 3*(idrug-1)
+	nmet = drug(idrug)%nmetabolites
+	iparent = DRUG_A + (MAX_METAB+1)*(idrug-1)
 	if (chemo(iparent)%present) then		! simulation with this drug has started
-	    do im = 0,2
+	    do im = 0,nmet
 	        ichemo = iparent + im
 	        ndrugs_present = ndrugs_present + 1
 	        drug_present(ndrugs_present) = ichemo

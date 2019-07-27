@@ -1,4 +1,4 @@
-! To determine distribution of colony size
+! To determine distribution of colony size 
 
 module colony
 

@@ -556,73 +556,6 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
 "Spectral radius",
 "Spectral radius value used by RKC solver"},
 
-//{"USE_EXTRA", 0, 0, 1,
-//"Use extra conc",
-//"Use extracellular O2 and glucose concentrations to determine cell death"},
-
-//{"USE_RELAX", 1, 0, 1,
-//"Use O2 relaxation solver",
-//"Use over- and under-relaxation to solve reaction-diffusion for oxygen"},
-
-//{"USE_PAR_RELAX", 1, 0, 1,
-//"Use parallel O2 relaxation solver",
-//"Use over- and under-relaxation to solve reaction-diffusion for oxygen, with parallelized over-relaxation"},
-
-//{"FD_SOLVER_1", 1, 0, 1,
-//"Use FD solver?",
-//"Use the FD solver in the far field"},
-
-//{"USE_DROP", 0, 0, 1,
-//"Account for drop deformation",
-//"Account for drop deformation when it is released to sit at the bottom of the well"},
-
-//{"NDROP", 1000, 0, 0,
-//"Dropping cell count",
-//"Number of cells in the spheroid when it is dropped."},
-
-//{"DROP_ALPHA", 0.4, 0, 0,
-//"Contact_diameter/diameter",
-//"Drop parameter alpha = initial (surface contact diameter)/(blob diameter).  Must be < 1."},
-
-//{"DROP_BETA", 0.6, 0, 0,
-//"Height/diameter",
-//"Drop parameter beta = initial (blob height)/(blob diameter).  Must be < 1."},
-
-//    {"SAVE_PROFILE_DATA",0,0,1,
-//     "Save profile data",
-//     "Save data for profile plots at a specified interval"},
-
-//    {"SAVE_PROFILE_DATA_FILE_NAME",0,0,0,
-//     "profile_data",
-//     "Base file name for saving profile data"},
-
-//    {"SAVE_PROFILE_DATA_INTERVAL",0,0,0,
-//     "Interval",
-//     "Time interval for saving profile data"},
-
-//    {"SAVE_PROFILE_DATA_NUMBER",1,0,0,
-//     "Number",
-//     "Number of times to save profile data"},
-
-//    {"SAVE_SLICE_DATA",0,0,1,
-//     "Save slice data",
-//     "Save data for z-slices at a specified interval"},
-
-//    {"SAVE_SLICE_DATA_FILE_NAME",0,0,0,
-//     "slice_data",
-//     "Base file name for saving slice data"},
-
-//    {"SAVE_SLICE_DATA_INTERVAL",0,0,0,
-//     "Interval",
-//     "Time interval for saving slice data"},
-
-//    {"SAVE_SLICE_DATA_NUMBER",1,0,0,
-//     "Number",
-//     "Number of times to save slice data"},
-
-// This is the end of the parameters that are actually read by the DLL
-// Entries after this point are QMyLabel dummies, to enable display of explanatory info  - no input data is transmitted,
-// followed by the list of time-series and profile plots selected for this run.
 
 {"DUMMY_HYPOXIA_THRESHOLD", 0, 0, 0,
 "Hypoxia threshold",
@@ -653,25 +586,31 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
     {"ECdrugA",                   0, 0,1,"","EC concentration of drug A in the medium (bottom)"},
     {"ECdrugAmet1",               0, 0,1,"","EC concentration of drug A metabolite 1 in the medium (bottom)"},
     {"ECdrugAmet2",               0, 0,1,"","EC concentration of drug A metabolite 2 in the medium (bottom)"},
+    {"ECdrugAmet3",               0, 0,1,"","EC concentration of drug A metabolite 3 in the medium (bottom)"},
     {"ECdrugB",                   0, 0,1,"","EC concentration of drug B in the medium (bottom)"},
     {"ECdrugBmet1",               0, 0,1,"","EC concentration of drug B metabolite 1 in the medium (bottom)"},
     {"ECdrugBmet2",               0, 0,1,"","EC concentration of drug B metabolite 2 in the medium (bottom)"},
+    {"ECdrugBmet3",               0, 0,1,"","EC concentration of drug B metabolite 3 in the medium (bottom)"},
     {"ICoxygen",                  1, 0,1,"","IC concentration of oxygen"},
     {"ICglucose",                 1, 0,1,"","IC concentration of glucose"},
     {"ICdrugA",                   0, 0,1,"","IC concentration of drug A"},
     {"ICdrugAmet1",               0, 0,1,"","IC concentration of drug A metabolite 1"},
     {"ICdrugAmet2",               0, 0,1,"","IC concentration of drug A metabolite 2"},
+    {"ICdrugAmet3",               0, 0,1,"","IC concentration of drug A metabolite 3"},
     {"ICdrugB",                   0, 0,1,"","IC concentration of drug B"},
     {"ICdrugBmet1",               0, 0,1,"","IC concentration of drug B metabolite 1"},
     {"ICdrugBmet2",               0, 0,1,"","IC concentration of drug B metabolite 2"},
+    {"ICdrugBmet3",               0, 0,1,"","IC concentration of drug B metabolite 3"},
     {"Medoxygen",                 1, 0,1,"","Medium concentration of oxygen"},
     {"Medglucose",                1, 0,1,"","Medium concentration of glucose"},
     {"MeddrugA",                  0, 0,1,"","Medium concentration of drug A"},
     {"MeddrugAmet1",              0, 0,1,"","Medium concentration of drug A metabolite 1"},
     {"MeddrugAmet2",              0, 0,1,"","Medium concentration of drug A metabolite 2"},
+    {"MeddrugAmet3",              0, 0,1,"","Medium concentration of drug A metabolite 3"},
     {"MeddrugB",                  0, 0,1,"","Medium concentration of drug B"},
     {"MeddrugBmet1",              0, 0,1,"","Medium concentration of drug B metabolite 1"},
     {"MeddrugBmet2",              0, 0,1,"","Medium concentration of drug B metabolite 2"},
+    {"MeddrugBmet3",              0, 0,1,"","Medium concentration of drug B metabolite 3"},
     {"doublingtime",              0, 0,1,"","Average doubling time"},
 
 
@@ -684,28 +623,11 @@ metabolism rate = dMdt = Cdrug.(1 - C2 + C2.KO2^n_O2/(KO2^n_O2 + C_O2^n_O2)).Kme
     {"Drug_A",                    0, 0,1,"","Extracellular drug A concentration on a line through the blob centre"},
     {"Drug_A_metab1",             0, 0,1,"","Extracellular drug A metabolite 1 concentration on a line through the blob centre"},
     {"Drug_A_metab2",             0, 0,1,"","Extracellular drug A metabolite 2 concentration on a line through the blob centre"},
+    {"Drug_A_metab3",             0, 0,1,"","Extracellular drug A metabolite 3 concentration on a line through the blob centre"},
     {"Drug_B",                    0, 0,1,"","Extracellular drug Bconcentration on a line through the blob centre"},
     {"Drug_B_metab1",             0, 0,1,"","Extracellular drug B metabolite 1 concentration on a line through the blob centre"},
     {"Drug_B_metab2",             0, 0,1,"","Extracellular drug B metabolite 2 concentration on a line through the blob centre"},
-/*
-    {"IC_MULTI",                  1, 0,1,"","Selected constituent on a line through the blob centre"},
-    {"IC_Oxygen",                 0, 0,1,"","Intracellular oxygen concentration on a line through the blob centre"},
-    {"IC_Glucose",                0, 0,1,"","Intracellular glucose concentration on a line through the blob centre"},
-    {"IC_Drug_A",                 0, 0,1,"","Intracellular drug A concentration on a line through the blob centre"},
-    {"IC_Drug_A_metab1",          0, 0,1,"","Intracellular drug A metabolite 1 concentration on a line through the blob centre"},
-    {"IC_Drug_A_metab2",          0, 0,1,"","Intracellular drug A metabolite 2 concentration on a line through the blob centre"},
-    {"IC_Drug_B",                 0, 0,1,"","Intracellular drug Bconcentration on a line through the blob centre"},
-    {"IC_Drug_B_metab1",          0, 0,1,"","Intracellular drug B metabolite 1 concentration on a line through the blob centre"},
-    {"IC_Drug_B_metab2",          0, 0,1,"","Intracellular drug B metabolite 2 concentration on a line through the blob centre"},
-    {"IC_CFSE",                   0, 0,1,"","CFSE concentration on a line through the blob centre"},
-    {"IC_growthrate",             0, 0,1,"","Cell growth rate on a line through the blob centre"},
-    {"IC_cellvolume",             0, 0,1,"","Cell volume fraction on a line through the blob centre"},
-    {"IC_O2byvolume",             0, 0,1,"","Cell volume fraction on a line through the blob centre"},
-// Distribution plots
-//    {"Oxygen",                    0, 0,1,"","Probability distribution of extracellular oxygen concentration"},
-//    {"cellvolume",                0, 0,1,"","Probability distribution of cell volume fraction"}
-*/
-
+    {"Drug_B_metab3",             0, 0,1,"","Extracellular drug B metabolite 3 concentration on a line through the blob centre"},
 };
 	nParams = sizeof(params)/sizeof(PARAM_SET);
 	workingParameterList = new PARAM_SET[nParams];

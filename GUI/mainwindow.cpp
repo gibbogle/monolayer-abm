@@ -3166,9 +3166,11 @@ int SliderPlus::nTicks() {
 // 4 TPZ drug
 // 5 TPZ drug metabolite 1
 // 6 TPZ drug metabolite 2
-// 7 DNB drug
-// 8 DNB drug metabolite 1
-// 9 DNB drug metabolite 2
+// 7 TPZ drug metabolite 3
+// 8 DNB drug
+// 9 DNB drug metabolite 1
+// 10 DNB drug metabolite 2
+// 11 DNB drug metabolite 3
 // ...
 //
 // GUI_to_DLL_index[ivar], ivar=0,..,nvars_used-1 = base DLL index (0,MAX_CHEMO+NEXTRA)
