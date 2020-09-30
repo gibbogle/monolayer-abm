@@ -455,7 +455,6 @@ k = 0
 	k = k+1
 	C = y(k)
 	dydt(k) = (-Ncells*membrane_flux - Kd*A*(C - y(k+1))/dX)/dV - C*decay_rate
-	
 	! Next compute diffusion and decay on the FD grid
 	KdAVX = Kd*A/(dV*dX)
 	do i = 2,N1D

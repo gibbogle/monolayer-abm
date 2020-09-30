@@ -149,7 +149,8 @@ void ExecThread::run()
 	LOG_MSG("Invoking DLL...");
 	int res=0;
     int hour;
-	const char *infile, *outfile;
+//	const char *infile, *outfile;   // const not needed (I think)
+    char *infile, *outfile;
     char version[12];
 	QString infile_path, outfile_path;
 	int len_infile, len_outfile;
@@ -157,16 +158,7 @@ void ExecThread::run()
     QString dll_version;
     bool cused[32];
 
-	infile_path = inputFile;
-	QString casename = QFileInfo(inputFile).baseName();
-	len_infile = infile_path.length();
-	std::string std_infile = infile_path.toStdString();
-	infile = std_infile.c_str();
-	outfile_path = casename.append(".res");
-	len_outfile = outfile_path.length();
-	std::string std_outfile = outfile_path.toStdString();
-    outfile = std_outfile.c_str();
-
+    paused = false;
     get_dll_build_version(version,&len_version);
     dll_version = version;
     // We can compare the version of the actual DLL that is linked
@@ -176,9 +168,30 @@ void ExecThread::run()
         emit(badDLL(dll_version));
         return;
     }
-	paused = false;
+
+    LOG_QMSG("inputFile: " + inputFile);
+	infile_path = inputFile;
+	QString casename = QFileInfo(inputFile).baseName();
+    outfile_path = casename.append(".res");
+    len_outfile = outfile_path.length();
+    len_infile = infile_path.length();
+
+    QByteArray ba = infile_path.toLocal8Bit();
+    infile = ba.data();
+    ba = outfile_path.toLocal8Bit();
+    outfile = ba.data();
+
     LOG_MSG("call execute");
-    execute(&ncpu,const_cast<char *>(infile),&len_infile,const_cast<char *>(outfile),&len_outfile,&res);
+//    LOG_MSG(const_cast<char *>(infile));
+//    LOG_MSG(const_cast<char *>(outfile));
+//    execute(&ncpu,const_cast<char *>(infile),&len_infile,const_cast<char *>(outfile),&len_outfile,&res);
+    char str[64];
+    sprintf(str,"input file: %s",infile);
+    LOG_MSG(str);
+    sprintf(str,"output file: %s",outfile);
+    LOG_MSG(str);
+    execute(&ncpu,infile,&len_infile,outfile,&len_outfile,&res);
+
     LOG_MSG("did execute");
 
 //    sleep(1000);
@@ -187,16 +200,12 @@ void ExecThread::run()
 //    sleep(5000);
 
     if (res) {
+        LOG_MSG("execute failed")
         terminate_run(&res);
         return;
     }
 
-//    char *b;
-//    get_string(&b);
-//    LOG_MSG(b);
-
     get_dimensions(&nsteps, &Global::DELTA_T, &Global::NT_DISPLAY, &Global::MAX_CHEMO, &Global::N_EXTRA, cused);
-//    summary_interval = int(3600./Global::DELTA_T);
     summary_interval = Global::NT_DISPLAY;
     sprintf(msg,"exthread: nsteps: %d summary_interval: %d",nsteps,summary_interval);
     LOG_MSG(msg);

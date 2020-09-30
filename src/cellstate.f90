@@ -95,6 +95,7 @@ if (use_volume_method) then
 	    ityp = cp%celltype
 	    call get_kill_probs(ityp,dose,C_O2,SER,p_recovery,p_death)
 	    kill_prob = 1 - p_recovery
+!	    write(*,'(a,f8.4)') 'kill_prob: ',kill_prob
 	    R = par_uni(kpar)
 	    if (R < kill_prob) then
 		    cp%radiation_tag = .true.
@@ -155,7 +156,8 @@ SER = 1.0
 do idrug = 1,Ndrugs_used
 	nmet = drug(idrug)%nmetabolites
     iparent = DRUG_A + (MAX_METAB+1)*(idrug-1)
-    if (.not.chemo(ichemo)%present) cycle
+!    if (.not.chemo(ichemo)%present) cycle 
+    if (.not.chemo(iparent)%present) cycle
     do im = 0,nmet
 	    ichemo = iparent + im
 	    if (drug(idrug)%sensitises(ityp,im)) then
@@ -165,6 +167,7 @@ do idrug = 1,Ndrugs_used
 		    SER_KO2 = drug(idrug)%SER_KO2(ityp,im)
 		    SERmax = (Cs*SER_max0 + SER_Km)/(Cs + SER_Km)
 		    SER = SER*(C_O2 + SER_KO2*SERmax)/(C_O2 + SER_KO2)
+!		    write(*,'(a,3e12.3)') 'SER term: ',SER_max0,SERmax,(C_O2 + SER_KO2*SERmax)/(C_O2 + SER_KO2)
 	    endif
     enddo
 enddo
@@ -193,6 +196,7 @@ OER_alpha_d = OER_alpha_d*SER
 OER_beta_d = OER_beta_d*SER
 
 expon = LQ(ityp)%alpha_H*OER_alpha_d + LQ(ityp)%beta_H*OER_beta_d**2
+!write(*,'(a,6f8.5)') 'CO2,SER,am,bm,Kms,e: ',C_O2,SER,LQ(ityp)%OER_am,LQ(ityp)%OER_bm,LQ(ityp)%K_ms,expon
 p_recovery = exp(-expon)	! = SF
 p_death = LQ(ityp)%death_prob
 end subroutine
