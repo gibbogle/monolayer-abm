@@ -176,10 +176,10 @@ void ExecThread::run()
     len_outfile = outfile_path.length();
     len_infile = infile_path.length();
 
-    QByteArray ba = infile_path.toLocal8Bit();
-    infile = ba.data();
-    ba = outfile_path.toLocal8Bit();
-    outfile = ba.data();
+    QByteArray ba1 = infile_path.toLocal8Bit();
+    infile = ba1.data();
+    QByteArray ba2 = outfile_path.toLocal8Bit();
+    outfile = ba2.data();
 
     LOG_MSG("call execute");
 //    LOG_MSG(const_cast<char *>(infile));
