@@ -14,8 +14,8 @@ contains
 
 !-----------------------------------------------------------------------------------------
 ! This subroutine is called to initialize a simulation run. 
-! ncpu = the number of processors to use 
-! infile = file with the input data
+! ncpu = the number of processors to use
+! infile = file with the input data 
 ! outfile = file to hold the output
 !-----------------------------------------------------------------------------------------
 subroutine Setup(ncpu,infile,outfile,ok)
@@ -847,14 +847,12 @@ end subroutine
 !-----------------------------------------------------------------------------------------
 subroutine ReadProtocol(nf)
 integer :: nf
-integer :: itime, ntimes, kevent, ichemo, idrug, im, kseq, kmin
+integer :: itime, ntimes, kevent, ichemo, idrug, im
 character*(64) :: line
 character*(16) :: drugname
 character*(1)  :: numstr
-real(REAL_KIND) :: t, dt, vol, conc, O2conc, O2flush, dose, O2medium, tmin
+real(REAL_KIND) :: t, dt, vol, conc, O2conc, O2flush, dose, O2medium
 type(event_type) :: E
-type(event_type), allocatable :: temp_event(:)
-logical :: non_seq
 
 write(logmsg,*) 'ReadProtocol:'
 call logger(logmsg)
@@ -868,7 +866,7 @@ if (ntimes == 0) then
 	Nevents = 0
 	return
 endif
-!Nevents = ntimes
+Nevents = ntimes
 if (allocated(event)) deallocate(event)
 allocate(event(2*ntimes))
 kevent = 0
@@ -961,45 +959,13 @@ do kevent = 1,Nevents
 !	write(*,'(a,i3,f8.0,2i3,3f8.4)') 'event: ',kevent,E%time,E%etype,E%ichemo,E%volume,E%conc,E%dose
 enddo
 ! Check that events are sequential
-non_seq = .false.
 do kevent = 1,Nevents-1
 	if (event(kevent)%time >= event(kevent+1)%time) then
-		write(logmsg,*) 'Non-sequential event: ',kevent,event(kevent)%time
+		write(logmsg,*) 'Error: non-sequential event: ',kevent,event(kevent)%time
 		call logger(logmsg)
-!		stop
-        non_seq = .true.
+		stop
 	endif
 enddo
-if (non_seq) then
-! reorder events
-    allocate(temp_event(2*ntimes))
-    do kevent = 1,Nevents
-        temp_event(kevent) = event(kevent)
-    enddo
-    kseq = 0
-    do
-        tmin = 1.0e10
-        do kevent = 1,Nevents
-            E = temp_event(kevent)
-            if (.not.E%done) then
-                if (E%time < tmin) then
-                    tmin = E%time
-                    kmin = kevent
-                endif
-            endif
-        enddo
-        kseq = kseq+1
-        event(kseq) = temp_event(kmin)
-        temp_event(kmin)%done = .true.
-        if (kseq == Nevents) exit
-    enddo
-    write(nflog,*) 'Resequenced events:'
-    do kevent = 1,Nevents
-	    E = event(kevent)
-	    write(nflog,'(a,i3,f8.0,2i3,3f8.4)') 'event: ',kevent,E%time,E%etype,E%ichemo,E%volume,E%conc,E%dose
-	enddo
-	deallocate(temp_event)
-endif
 end subroutine
 
 !-----------------------------------------------------------------------------------------
@@ -1664,7 +1630,6 @@ do idiv = 0,ndiv-1
 			res = 5
 			return
 		endif
-!		write(*,'(a,2e12.3)') 'simulate_step: Cin,Cex(O2): ',cell_list(1)%Cin(OXYGEN),chemo(OXYGEN)%Cmedium(1)
 		if (use_SS_oxygen) then
 			call SetOxygenLevels
 		endif
@@ -1734,53 +1699,22 @@ end subroutine
 subroutine Execute(ncpu,infile_array,inbuflen,outfile_array,outbuflen,res) BIND(C) 
 !DEC$ ATTRIBUTES DLLEXPORT :: execute
 use, intrinsic :: iso_c_binding
-character(c_char), intent(IN) :: infile_array(*), outfile_array(*)
+character(c_char) :: infile_array(128), outfile_array(128)
 integer(c_int) :: ncpu, inbuflen, outbuflen, res
 character*(128) :: infile, outfile
-logical :: ok, success, logfile_isopen
-integer :: i, len
-integer :: nflogz
-
-!nflogz = nflog
-open(nflog,file='monolayer.log',status='replace')
-inquire(unit=nflog,OPENED=logfile_isopen)
-if (.not.logfile_isopen) then
-    res = 1
-    return
-endif
-!call logger('DEBUG: execute 1')
-!close(nflog)
-!return
-
-!write(nflogz,'(a)') 'DEBUG: execute 1'
-!write(nflogz,*) 'DEBUG: inbuflen: ',inbuflen
-!write(nflogz,*) 'DEBUG: outbuflen: ',outbuflen
-!close(nflogz)
-
-!len=0
-!do
-!   if (infile_array(len+1) == C_NULL_CHAR) exit
-!   len = len + 1
-!end do
-!write(nflogz,*) 'len = ',len
+logical :: ok, success
+integer :: i
 
 infile = ''
 do i = 1,inbuflen
-!    write(nflogz,*) 'DEBUG: ',i  !,infile_array(i)
-!    write(nflogz,*) 'DEBUG: ',infile_array(i)
 	infile(i:i) = infile_array(i)
 enddo
-!infile = 'basecase.inp'
-!write(nflogz,'(a)') infile
 outfile = ''
 do i = 1,outbuflen
 	outfile(i:i) = outfile_array(i)
 enddo
-!write(nflogz,'(a)') outfile
 
-!write(nflogz,*) 'DEBUG: opening monolayer.log'
-
-!call logger('DEBUG: execute 2')
+open(nflog,file='monolayer.log',status='replace')
 
 #ifdef GFORTRAN
     write(logmsg,'(a)') 'Built with GFORTRAN'
@@ -1801,7 +1735,6 @@ logmsg = 'OS??'
     write(logmsg,'(a)') 'OS is Windows'
 #endif
 call logger(logmsg)
-!call logger('DEBUG: execute 3')
 
 !#ifdef OPENMP
 #if defined(OPENMP) || defined(_OPENMP)
@@ -1813,7 +1746,6 @@ write(logmsg,*) 'inputfile:  ', infile
 call logger(logmsg)
 write(logmsg,*) 'outputfile: ', outfile 
 call logger(logmsg)
-!call logger('DEBUG: execute 4')
 if (use_TCP) then
 	call connecter(ok)
 	if (.not.ok) then
@@ -1821,7 +1753,6 @@ if (use_TCP) then
 		return
 	endif
 endif
-!call logger('DEBUG: execute 5')
 
 DELTA_T = 600
 nsteps = 100
@@ -1829,8 +1760,6 @@ res=0
 
 ok = .true.
 call Setup(ncpu,infile,outfile,ok)
-!call logger('DEBUG: execute 6')
-
 if (ok) then
 !	clear_to_send = .true.
 !	simulation_start = .true.
